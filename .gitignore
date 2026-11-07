@@ -1,0 +1,14 @@
+node_modules
+.env
+data
+*.bundle
+*.log
+.DS_Store
+
+# Personal: never committed (scripts/check-private.ts also blocks them)
+config/answer-bank.yaml
+config/answer-bank.*.yaml
+!config/answer-bank.example.yaml
+config/my-answers.yaml
+config/private-terms.txt
+config/google-oauth-client.json

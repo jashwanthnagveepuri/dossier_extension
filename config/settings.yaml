@@ -1,0 +1,34 @@
+# How the applier runs. Secrets never go in this file: they come from environment variables (see .env.example).
+
+dossier:
+  url: http://localhost:3000          # your Dossier
+  password_env: DOSSIER_PASSWORD      # used only to download resume PDFs
+
+anthropic:
+  api_key_env: ANTHROPIC_API_KEY
+  model: claude-sonnet-5-5            # scoring and matching unusual form questions; change if your account uses another model
+
+search:
+  # Set Dossier's job source to FreeHire (Settings → Job search): it lists jobs straight from
+  # company ATS pages, so links point at Greenhouse and Lever forms instead of job boards.
+  country: us
+  posted_within: day                  # day, 3days, week or month
+  queries:                            # replace with the job titles you want; each runs as its own Dossier search
+    - Java Software Engineer
+    - Backend Engineer Java
+    - Full Stack Engineer Java React
+    - Software Engineer
+    - Platform Engineer AWS
+    - Cloud Application Developer AWS
+
+browser:
+  headless: false                     # show the browser while it works; true runs it hidden
+  slow_mo_ms: 40                      # small delay between actions, so forms behave like a person typed them
+
+phase:
+  sites: [greenhouse, lever]          # Phase 1. Workday and other career pages come in later phases.
+
+gmail:
+  enabled: true
+  client_file: config/google-oauth-client.json   # a Google "Desktop app" OAuth client you download (see README)
+  lookback_days: 45

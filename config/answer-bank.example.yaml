@@ -1,0 +1,136 @@
+# Example answer bank for a made-up person (Alex Rivera).
+# Copy it to config/answer-bank.yaml and replace every value with your own. That copy is git-ignored.
+# Rule: legal and personal questions are answered ONLY from this file.
+# If a required question is not covered here, the application stays a Dossier Draft marked "needs you".
+version: 1
+
+identity:
+  legal_first_name: Alex
+  legal_last_name: Rivera
+  preferred_name: Alex
+  email: alex.rivera@example.com          # also the inbox read for verification codes and confirmations
+  phone: "555-010-0199"
+  address:
+    street: 100 Main Street
+    city: Springfield
+    state: Illinois
+    state_code: IL
+    postal_code: "62701"
+    country: United States
+  linkedin: https://www.linkedin.com/in/alex-rivera-example
+  github: https://github.com/alex-rivera-example
+  portfolio: https://alex-rivera.example.com/   # main "Website" / "Portfolio" field
+  other_website: https://alex-rivera-example.github.io/     # only when a second website field exists
+  pronouns: leave_blank
+
+work_authorization:
+  authorized_to_work_in_us: "Yes"
+  requires_sponsorship_now_or_future: "Yes"
+  current_status_text: "Employment Authorization Document (EAD)"
+  authorization_expiry_date: needs_you      # if a form asks for the date: leave the application as a Draft
+  authorization_is_temporary: "Yes"         # answers "Is your authorization temporary or subject to expiration?"
+  sponsorship_needed: future                # when a form separates "now" from "in the future" (H-1B): in the future
+  requires_sponsorship_now: "No"           # "Do you NOW require sponsorship?": No (current authorization covers today). Future, or now-or-future: Yes
+  over_18: "Yes"
+
+background:                               # facts from your resume, for "current employer" style questions
+  current_company: Example Bank
+  current_title: "Software Engineer II"
+  years_of_experience: 5
+  highest_degree: Master's degree
+  school: State University
+  degree_name: Master of Science in Information Technology
+  field_of_study: Information Technology
+  graduation_year: 2024
+  previously_employed_by_this_company: "No"   # true when past employers are on the do-not-apply list
+
+education:
+  graduate_gpa: "3.8"
+  undergraduate_gpa: "3.4"
+  test_scores:                              # a number, "none" (never took it) or "ask" (leave the application as a Draft)
+    sat: none
+    act: none
+    gre: 320
+    gmat: ask
+
+experience:                               # screening questions about hands-on AI work
+  ai_tools_used: Claude API                # "Which have you used to build or integrate an AI solution?"
+  built_ai_automation: "Yes"               # "Built an automation where AI takes an input...?" (an explanation box leaves a Draft)
+
+personal:
+  bound_by_employment_agreements: "No"     # not bound by a non-compete, non-solicit or post-employment restriction
+  needs_interview_adjustments: "No"       # "Any adjustments for the interview process?": No
+  collector: "No"                          # "Are you a collector?" (sports and collectibles retailers ask this)
+  relatives_at_company: "No"               # "Do you have relatives or friends working here?"
+  text_message_opt_in: "No"                 # "Opt in to text messages about your application?"
+
+compensation:
+  desired_salary_range: "$110,000–$140,000"
+  desired_salary_single_number: 110000
+  currency: USD
+
+logistics:
+  willing_to_relocate: "Yes"              # anywhere in the US
+  onsite_or_hybrid_ok: "Yes"
+  start_date_text: "2 weeks from offer acceptance"
+  notice_period_weeks: 2
+  how_did_you_hear: "Company website"
+
+voluntary_self_identification:
+  gender: Female
+  hispanic_or_latino: "No"
+  race: White
+  veteran_status: "I am not a protected veteran"
+  disability: "No, I do not have a disability and have not had one in the past"
+
+documents:
+  resume: dossier_tailored_pdf
+  cover_letter: always                    # Dossier-written, tailored: attached whenever there is an upload box (only_when_required | always | never)
+
+ai_answers:                               # questions not covered here: answered by the AI from your Dossier profile only
+  enabled: true                           # false = every uncovered question leaves the application as a Draft
+  max_words: 120                          # longest written answer
+  # The AI fills every question, required or optional, except the always_needs_you list below.
+  # Facts about you (authorization, salary, location, EEO) come from this file, not from the AI's judgment.
+  # Optional free-text boxes ("Anything else?") stay blank. Every AI answer is saved to ai-answers.txt.
+
+always_needs_you:                         # the only questions that stop an application (it stays a Draft for you)
+  - criminal history or background-check disclosures
+  - non-compete or prior agreements
+  - work authorization (EAD) end dates
+  - pronouns, when required
+  - signatures, initials, and certification or attestation text beyond the standard "information is true" checkbox
+
+targeting:
+  employment_types: [Full-time]
+  role_families: [Backend (Java and Spring), Full-Stack (Java and React), General Software Engineer, Platform and Cloud]
+  excluded_title_keywords: [AI Engineer, Applied AI, GenAI, LLM, Machine Learning, ML Engineer]
+  experience_years:                        # replaces title-based seniority
+    apply_when_required_min_years: {from: 2, to: 5}   # "2+", "3-5", "5+ years" apply; "6+" and up skip
+    no_years_stated: apply_unless_title_has [Staff, Principal, Distinguished, Director, Manager, Head of, Intern]
+  locations: anywhere_in_us
+  arrangements: [Remote, Hybrid, On-site]
+  skip_if_posting_says:
+    - no visa sponsorship
+    - US citizenship required
+    - green card required
+    - security clearance required
+  sites: [Greenhouse, Lever, Workday, Company career pages]
+
+selection:
+  daily_cap: 15
+  tiers:
+    - {min_score: 70, take: all}            # first, highest score first
+    - {min_score: 60, take: all}            # then 60–69
+    - {min_score: 50, take_max: 5,          # top-up only on thin days
+       only_if_fewer_than: 10, counted_from: "score >= 60 today"}
+  never_below: 50
+
+duplicates:
+  same_job: skip_always
+  same_company_other_role: allowed
+
+do_not_apply:
+  past_employers: [Example Bank, Example Insurance Co]            # never apply to these (your current and past employers)
+  aggregators: [Jobgether, WhatJobs, Adzuna, Talentify, Lensa, Jooble]   # job boards that repost other companies' jobs
+  other_companies: []                     # any other companies to skip, e.g. [Initech, Globex]
