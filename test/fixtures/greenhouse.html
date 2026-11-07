@@ -1,0 +1,62 @@
+<!doctype html><html><body>
+<!-- Modeled on Greenhouse's job-boards form: labels with for=, a hidden file input, react-select style comboboxes, EEO section. -->
+<h1>Software Engineer, Backend</h1>
+<!-- Like the real board: a hidden job-alert form comes before the application form. -->
+<form id="job-alert" style="display:none"><input type="email" name="alert_email"><button type="submit">Create alert</button></form>
+<form class="search"><input type="search" name="q"></form>
+<form id="application-form" onsubmit="event.preventDefault(); if (document.querySelector('#application-form').checkValidity()) { document.body.innerHTML='<h1>Thank you for applying to Acme!</h1>'; }">
+  <div class="field"><label for="first_name">First Name<span>*</span></label><input id="first_name" type="text" required></div>
+  <div class="field"><label for="last_name">Last Name<span>*</span></label><input id="last_name" type="text" required></div>
+  <div class="field"><label for="preferred_name">Preferred First Name</label><input id="preferred_name" type="text"></div>
+  <div class="field"><label for="email">Email<span>*</span></label><input id="email" type="email" required></div>
+  <div class="field"><label for="phone">Phone</label><input id="phone" type="tel"></div>
+  <div class="field"><label id="loc-label" for="candidate-location">Location (City)<span>*</span></label>
+    <input id="candidate-location" role="combobox" aria-labelledby="loc-label" aria-required="true" autocomplete="off">
+    <div id="loc-menu"></div></div>
+  <div class="field"><label for="resume">Resume/CV<span>*</span></label><input id="resume" type="file" style="display:none" required><button type="button">Attach</button></div>
+  <div class="field"><label for="cover_letter">Cover Letter</label><input id="cover_letter" type="file" style="display:none"></div>
+  <div class="field"><label for="q1">LinkedIn Profile</label><input id="q1" type="text"></div>
+  <div class="field"><label for="q2">Website</label><input id="q2" type="text"></div>
+  <div class="field"><label id="q3-label" for="q3">Are you legally authorized to work in the United States?<span>*</span></label>
+    <div class="select__control"><div class="select__value-container"><div class="select__input-container"><input id="q3" role="combobox" aria-labelledby="q3-label" aria-required="true" readonly></div></div></div>
+    <input required tabindex="-1" aria-hidden="true" class="remix-requiredInput" value="" style="opacity:0;height:0;width:0"><div class="menu rs" data-for="q3" data-options="Yes|No"></div></div>
+  <div class="field"><label id="q4-label" for="q4">Will you now or in the future require sponsorship for employment visa status (e.g. H-1B visa status)?<span>*</span></label>
+    <div class="select__control"><div class="select__value-container"><div class="select__input-container"><input id="q4" role="combobox" aria-labelledby="q4-label" aria-required="true" readonly></div></div></div>
+    <div class="menu rs" data-for="q4" data-options="Yes|No"></div></div>
+  <div class="field"><label for="q5">What are your salary expectations?</label><input id="q5" type="text"></div>
+  <div class="field"><label for="q6">How did you hear about us?<span>*</span></label>
+    <select id="q6" required><option value="">Select...</option><option>LinkedIn</option><option>Company Website</option><option>Referral</option><option>Other</option></select></div>
+  <fieldset data-applier-ignore-not>
+    <h3>Voluntary Self-Identification</h3>
+    <div class="field"><label for="gender">Gender</label><select id="gender"><option value="">Select...</option><option>Female</option><option>Male</option><option>Decline To Self Identify</option></select></div>
+    <div class="field"><label for="hispanic">Are you Hispanic/Latino?</label><select id="hispanic"><option value="">Select...</option><option>Yes</option><option>No</option><option>Decline To Self Identify</option></select></div>
+    <div class="field"><label for="veteran">Veteran Status</label><select id="veteran"><option value="">Select...</option><option>I am not a protected veteran</option><option>I identify as one or more of the classifications of protected veteran</option><option>I don't wish to answer</option></select></div>
+    <div class="field"><label for="disability">Disability Status</label><select id="disability"><option value="">Select...</option><option>Yes, I have a disability, or have had one in the past</option><option>No, I do not have a disability and have not had one in the past</option><option>I do not want to answer</option></select></div>
+  </fieldset>
+  <div class="field"><input id="ack" type="checkbox" required><label for="ack">I certify that the information provided in this application is true and complete.</label></div>
+  <button type="submit">Submit application</button>
+</form>
+<script>
+  // Minimal react-select stand-in: clicking a combobox lists role=option items; typing in the location box lists cities.
+  function show(input, items) {
+    document.querySelectorAll('.opts').forEach(n => n.remove());
+    const list = document.createElement('div'); list.className = 'opts'; list.setAttribute('role','listbox');
+    items.forEach(text => { const o = document.createElement('div'); o.setAttribute('role','option'); o.textContent = text;
+      o.onclick = () => {
+        if (input.closest('.select__value-container')) {
+          // Like react-select: the input stays empty; the choice shows in a sibling element.
+          input.value = '';
+          const box = input.closest('.select__value-container');
+          box.querySelectorAll('.select__single-value').forEach(n => n.remove());
+          const shown = document.createElement('div'); shown.className = 'select__single-value'; shown.textContent = text; box.prepend(shown);
+          const hidden = input.closest('.field').querySelector("input[aria-hidden='true']"); if (hidden) hidden.value = text;
+        } else input.value = text;
+        input.dataset.chosen = text; list.remove(); }; list.appendChild(o); });
+    input.after(list);
+  }
+  document.querySelectorAll('.menu').forEach(menu => { const input = document.getElementById(menu.dataset.for);
+    input.addEventListener('click', () => show(input, menu.dataset.options.split('|'))); });
+  const loc = document.getElementById('candidate-location');
+  loc.addEventListener('input', () => { if (loc.value.length > 2) show(loc, ['Springfield, Illinois, United States', 'Springfield, Missouri, United States']); });
+</script>
+</body></html>
