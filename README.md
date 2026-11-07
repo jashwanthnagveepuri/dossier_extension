@@ -12,6 +12,8 @@ Dossier search ──► filter ──► score ──► pick (daily cap) ─�
 
 Supports **Greenhouse and Lever** forms (including company career pages that embed them). Workday and other sites are found but skipped for now.
 
+> **Easiest way to set it up:** open [AI_SETUP_PROMPT.md](AI_SETUP_PROMPT.md), copy the prompt into Claude, ChatGPT or any AI assistant, and it walks you through every step below one question at a time, including writing your answer bank for you.
+
 ## What it will and won't do
 
 - Answers personal and legal questions (work authorization, sponsorship, salary, location, voluntary self-ID) **only from your `config/answer-bank.yaml`**. Other questions are answered by Claude from your Dossier profile, truthfully.
@@ -30,13 +32,15 @@ Supports **Greenhouse and Lever** forms (including company career pages that emb
 
 ## Setup (once, about 20 minutes)
 
+Prefer to be guided? Use [AI_SETUP_PROMPT.md](AI_SETUP_PROMPT.md) instead of the steps below.
+
 1. **In Dossier:**
    - Settings → AI provider: set one up (Dossier writes each tailored resume).
    - Settings → Job search: choose **FreeHire** (it lists jobs straight from company Greenhouse and Lever pages).
    - Settings → MCP connector: turn on **Let apps connect**.
 2. **Get the code:**
    ```
-   git clone https://github.com/<owner>/dossier_extension.git
+   git clone <this repo's address, from the green Code button>
    cd dossier_extension
    npm install
    npx playwright install chromium
@@ -79,6 +83,7 @@ To run it on a schedule: Windows Task Scheduler (program `cmd.exe`, arguments `/
 
 | Path | What | In git? |
 |---|---|---|
+| `AI_SETUP_PROMPT.md` | A prompt that turns any AI assistant into a step-by-step setup guide. | yes |
 | `config/answer-bank.example.yaml` | A made-up person's answers: the template for yours. | yes |
 | `config/answer-bank.yaml` | Your answers. | **never** |
 | `config/my-answers.yaml` | Answers you gave through `npm run pending`. | **never** |
@@ -86,6 +91,19 @@ To run it on a schedule: Windows Task Scheduler (program `cmd.exe`, arguments `/
 | `.env` | Dossier password, Anthropic key. | **never** |
 | `config/google-oauth-client.json` | Your Google OAuth client. | **never** |
 | `data/` | Sign-ins, history, reports, resumes, screenshots. | **never** |
+
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| `npm run setup` says the Dossier password is wrong | `.env` must hold the plain password you sign in with, not a hash from Dossier's data. Wrap it in single quotes if it has special characters. |
+| Google says "Access blocked" or "app has not completed verification" | Add your Gmail address as a **Test user** on the OAuth consent screen in Google Cloud Console. |
+| Gmail sign-in never finishes | Make sure `config/google-oauth-client.json` is a **Desktop app** client, then run `npm run setup` again. |
+| "Couldn't find the application form" | The job may be closed or need a login. `npm run retry -- --all` later; the screenshot is in `data/evidence/`. |
+| "Incorrect security code" or it waits for a code | Gmail must be connected (`npm run setup`) and Greenhouse's code emails must reach that inbox. |
+| An application stays a Draft | `npm run pending` asks you the question it stopped on, once, and remembers your answer. |
+| Drafts in Dossier you don't recognise | `npm run sync` explains each one and queues the ones never submitted. |
+| An answer on a form is wrong | Fix it in `config/answer-bank.yaml`; check what was filled in `data/evidence/<job>/fields.txt`. |
 
 ## Privacy check (before every commit and push)
 
