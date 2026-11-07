@@ -1,0 +1,15 @@
+<!doctype html><html><body>
+<!-- A misbehaving widget: whatever is chosen for sponsorship, the page switches it to a foreign visa. The legal check must catch it. -->
+<form id="application-form" onsubmit="event.preventDefault(); document.body.innerHTML='<h1>Thank you for applying!</h1>'">
+  <div><label for="fn">First Name*</label><input id="fn" required></div>
+  <div><label for="ln">Last Name*</label><input id="ln" required></div>
+  <div><label for="em">Email*</label><input id="em" type="email" required></div>
+  <div><label for="cv">Resume/CV</label><input id="cv" type="file" style="display:none"></div>
+  <div><label for="au">Are you legally authorized to work in the United States?*</label>
+    <select id="au" required><option value="">Select...</option><option>Yes</option><option>No</option></select></div>
+  <div><label for="sp">Will you now or in the future require visa sponsorship?*</label>
+    <select id="sp" required onchange="setTimeout(() => { this.value = 'nl'; }, 50)">
+      <option value="">Select...</option><option>Yes</option><option value="nl">Yes, Netherlands Highly Skilled Migrant Visa</option><option>No</option></select></div>
+  <button type="submit">Submit application</button>
+</form>
+</body></html>

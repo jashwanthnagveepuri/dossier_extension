@@ -1,0 +1,40 @@
+<!doctype html><html><body>
+<!-- Like Acme's Greenhouse form: several "Yes, …" sponsorship options, race shown only after Hispanic/Latino, and an emailed security code before submitting. -->
+<form id="application-form">
+  <div><label for="fn">First Name*</label><input id="fn" required></div>
+  <div><label for="ln">Last Name*</label><input id="ln" required></div>
+  <div><label for="em">Email*</label><input id="em" type="email" required></div>
+  <div><label for="cv">Resume/CV</label><input id="cv" type="file" style="display:none"></div>
+  <div><label for="sp">Will you now or in the future require sponsorship for a visa to remain in your current location?*</label>
+    <select id="sp" required><option value="">Select...</option><option>Yes, Netherlands Highly Skilled Migrant Visa</option><option>Yes, US H-1B Visa</option><option>Yes, Canada work permit</option><option>No</option></select></div>
+  <div><label id="sp2-label" for="sp2">Will you now or in the future require sponsorship for a visa to remain in your current location? (searchable)*</label>
+    <input id="sp2" role="combobox" aria-labelledby="sp2-label" aria-required="true" autocomplete="off"></div>
+  <div><label for="hl">Are you Hispanic/Latino?</label><select id="hl" onchange="setTimeout(()=>document.getElementById('racebox').style.display='block',400)"><option value="">Select...</option><option>Yes</option><option>No</option></select></div>
+  <div id="racebox" style="display:none"><label for="rc">Please identify your race</label><select id="rc"><option value="">Select...</option><option>White</option><option>Asian</option><option>Decline To Self Identify</option></select></div>
+  <div id="codebox" style="display:none"><p>A verification code was sent to you. To submit your application, enter the 8-character code to confirm you're a human.</p>
+    <div>Security code</div><span id="boxes"></span></div>
+  <button type="submit">Submit application</button>
+</form>
+<script>
+  const boxes = document.getElementById('boxes');
+  for (let i = 0; i < 8; i++) { const b = document.createElement('input'); b.maxLength = 1; b.className = 'code'; b.style.width = '20px'; boxes.appendChild(b); }
+  // Searchable dropdown like Acme's: lists everything on click, filters as you type.
+  const sp2 = document.getElementById('sp2');
+  const all = ['Yes, Netherlands Highly Skilled Migrant Visa', 'Yes, Canada work permit', 'No'];
+  const showList = () => {
+    document.querySelectorAll('#sp2-list').forEach(n => n.remove());
+    const list = document.createElement('div'); list.id = 'sp2-list'; list.setAttribute('role', 'listbox');
+    all.filter(t => t.toLowerCase().includes(sp2.value.toLowerCase())).forEach(t => { const o = document.createElement('div'); o.setAttribute('role','option'); o.textContent = t; o.onclick = () => { sp2.value = t; list.remove(); }; list.appendChild(o); });
+    sp2.after(list);
+  };
+  sp2.addEventListener('click', showList); sp2.addEventListener('input', showList);
+  if (location.search.includes('no-lookalike')) sp2.parentElement.remove();
+  document.getElementById('application-form').onsubmit = (e) => {
+    e.preventDefault();
+    const box = document.getElementById('codebox');
+    if (box.style.display === 'none') { box.style.display = 'block'; return; }
+    const code = Array.from(document.querySelectorAll('.code')).map(b => b.value).join('');
+    if (code === 'AB12cd34') document.body.innerHTML = '<h1>Thank you for applying!</h1>';
+  };
+</script>
+</body></html>
