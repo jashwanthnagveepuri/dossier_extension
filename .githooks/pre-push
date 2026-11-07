@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks pushes of commits that contain your personal details or secrets, including the author name.
+exec npx --no-install tsx scripts/check-private.ts --push

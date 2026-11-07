@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks commits that contain your personal details or secrets (see scripts/check-private.ts).
+exec npx --no-install tsx scripts/check-private.ts --staged
