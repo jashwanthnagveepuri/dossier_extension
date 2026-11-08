@@ -80,6 +80,7 @@ voluntary_self_identification:
   gender: Female
   hispanic_or_latino: "No"
   race: White
+  # race_detail: ""                       # optional: the subgroup to pick when a form splits your race into several options
   veteran_status: "I am not a protected veteran"
   disability: "No, I do not have a disability and have not had one in the past"
 

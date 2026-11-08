@@ -337,3 +337,16 @@ describe("certification that the application is accurate", () => {
     expect(aiMayAnswer(null, { label: "Signature (type your full name)" } as any)).toBe(false);
   });
 });
+
+describe("race questions that split a race into subgroups", () => {
+  it("matches 'racial/ethnic background' and prefers race_detail when set", async () => {
+    const { matchRule, answerFor } = await import("../src/forms/answers.js");
+    const { loadAnswerBank } = await import("../src/config.js");
+    const bank = loadAnswerBank();
+    const label = "How would you describe your racial/ethnic background? (mark all that apply)";
+    expect(matchRule(label)).toBe("race");
+    const f = { id: "r", kind: "checkbox", label, required: false, options: ["East Asian", "South Asian", "Southeast Asian", "White", "I don't wish to answer"] } as any;
+    const withDetail = { ...bank, voluntary_self_identification: { ...bank.voluntary_self_identification, race_detail: "South Asian" } };
+    expect(answerFor(f, withDetail, "race")).toMatchObject({ kind: "choice", prefer: ["south asian", bank.voluntary_self_identification.race.toLowerCase()] });
+  });
+});

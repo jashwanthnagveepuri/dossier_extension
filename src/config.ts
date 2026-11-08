@@ -73,6 +73,7 @@ export const answerBankSchema = z.object({
     gender: text,
     hispanic_or_latino: yesNo,
     race: text,
+    race_detail: z.string().trim().optional(), // a subgroup for forms that split a race into several options
     veteran_status: text,
     disability: text,
   }),

@@ -95,7 +95,15 @@ export const RULES: Record<string, Rule> = {
 
   // ---- Voluntary self-identification ----
   hispanic: { description: "Hispanic or Latino ethnicity (EEO)", match: [/hispanic|latin[oax]/i], answer: (bank) => ({ kind: "choice", prefer: bank.voluntary_self_identification.hispanic_or_latino === "No" ? ["no", "not hispanic"] : ["yes", "hispanic or latino"] }) },
-  race: { description: "race or ethnicity (EEO)", match: [/\brace\b|ethnicit/i], answer: (bank) => ({ kind: "choice", prefer: [bank.voluntary_self_identification.race.toLowerCase()] }) },
+  race: {
+    description: "race or ethnicity (EEO)",
+    match: [/\brac(e|ial)\b|ethnic/i],
+    // A form that splits one race into subgroups (East / South / Southeast Asian) uses race_detail when you set one.
+    answer: (bank) => {
+      const self = bank.voluntary_self_identification;
+      return { kind: "choice", prefer: [self.race_detail, self.race].filter((v): v is string => Boolean(v)).map((v) => v.toLowerCase()) };
+    },
+  },
   gender: { description: "gender (EEO)", match: [/\bgender\b|\bsex\b/i], answer: (bank) => ({ kind: "choice", prefer: [bank.voluntary_self_identification.gender.toLowerCase(), bank.voluntary_self_identification.gender === "Male" ? "man" : "woman"] }) },
   veteran: { description: "protected veteran status (EEO)", match: [/veteran/i], answer: (bank) => ({ kind: "choice", prefer: [bank.voluntary_self_identification.veteran_status.toLowerCase(), "not a protected veteran", "i am not a veteran", "no"] }) },
   accommodation: {
