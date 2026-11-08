@@ -61,32 +61,11 @@ export function greenhouseBoardGuesses(pageHtml: string, url: string): string[] 
   return [...new Set([...found, host, host.replace(/-/g, ""), `${host}inc`].filter((name) => name && name !== "embed"))];
 }
 
-/** For a company page with ?gh_jid=, opens that job's form on Greenhouse itself; null if none of the guesses work. */
-async function openGreenhouseDirect(page: Page, url: string): Promise<SiteForm | null> {
-  const id = new URL(url).searchParams.get("gh_jid");
-  if (!id) return null;
-  let html = "";
-  let frameUrls: string[] = [];
-  try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
-    await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
-    // The embed script adds its iframe late; give it a moment.
-    await page.locator("iframe[src*='greenhouse.io']").first().waitFor({ state: "attached", timeout: 8_000 }).catch(() => undefined);
-    html = await page.content();
-    frameUrls = page.frames().map((f) => f.url()).filter((u) => /greenhouse\.io\/.*job_app/.test(u));
-  } catch {
-    // The company page didn't load; the address alone still gives a guess.
-  }
-  // 1. The exact form the company page embeds, opened on its own (no iframe to lose track of).
-  // 2. Greenhouse's embed form for each board guess: it never redirects back to the company site.
-  // 3. The board's job page (some boards redirect this one to the company site, so it comes last).
-  const boards = greenhouseBoardGuesses(html, url).slice(0, 4);
-  const candidates = [
-    ...frameUrls,
-    ...boards.map((board) => `https://job-boards.greenhouse.io/embed/job_app?for=${board}&token=${id}`),
-    ...boards.map((board) => `https://job-boards.greenhouse.io/${board}/jobs/${id}`),
-  ];
-  for (const direct of [...new Set(candidates)]) {
+/** Tries Greenhouse addresses for one job; the first that shows the application form wins. */
+async function tryGreenhouse(page: Page, candidates: string[], tried: Set<string>): Promise<SiteForm | null> {
+  for (const direct of candidates) {
+    if (tried.has(direct)) continue;
+    tried.add(direct);
     const response = await page.goto(direct, { waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => null);
     if (!response || response.status() >= 400) continue;
     await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
@@ -96,19 +75,58 @@ async function openGreenhouseDirect(page: Page, url: string): Promise<SiteForm |
   return null;
 }
 
-/** Opens the posting and returns the frame and selector the form lives in. */
-export async function openForm(page: Page, site: Site, url: string): Promise<SiteForm> {
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
+const greenhouseUrls = (boards: string[], id: string) => [
+  // Greenhouse's embed form never redirects back to the company site; the board's job page sometimes does.
+  ...boards.map((board) => `https://job-boards.greenhouse.io/embed/job_app?for=${board}&token=${id}`),
+  ...boards.map((board) => `https://job-boards.greenhouse.io/${board}/jobs/${id}`),
+];
 
-  // A company careers page with ?gh_jid= embeds a Greenhouse form, often late or behind buttons.
-  // Going straight to the Greenhouse form is more reliable.
+/** For a company page with ?gh_jid=, opens that job's form on Greenhouse itself; null if nothing works. */
+async function openGreenhouseDirect(page: Page, url: string): Promise<SiteForm | null> {
+  const id = new URL(url).searchParams.get("gh_jid");
+  if (!id) return null;
+  const tried = new Set<string>();
+
+  // 1. Board names guessed from the address alone, without opening the company's site at all
+  //    (some career sites cut off automated browsers after a request or two).
+  const fromAddress = await tryGreenhouse(page, greenhouseUrls(greenhouseBoardGuesses("", url).slice(0, 3), id), tried);
+  if (fromAddress) return fromAddress;
+
+  // 2. The company page itself: the exact form it embeds, and the board name in its HTML.
+  let html = "";
+  let frameUrls: string[] = [];
+  try {
+    await gotoWithRetry(page, url);
+    await page.locator("iframe[src*='greenhouse.io']").first().waitFor({ state: "attached", timeout: 8_000 }).catch(() => undefined);
+    html = await page.content();
+    frameUrls = page.frames().map((f) => f.url()).filter((u) => /greenhouse\.io\/.*job_app/.test(u));
+  } catch {
+    return null; // the company page won't load either
+  }
+  return tryGreenhouse(page, [...frameUrls, ...greenhouseUrls(greenhouseBoardGuesses(html, url).slice(0, 4), id)], tried);
+}
+
+/** Opens a page, retrying once after a dropped connection (some career sites cut off automated browsers). */
+async function gotoWithRetry(page: Page, url: string): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  } catch (error) {
+    if (!/net::ERR_|Timeout/i.test(String(error))) throw error;
+    await page.waitForTimeout(4_000);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  }
+  await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
+}
+
+export async function openForm(page: Page, site: Site, url: string): Promise<SiteForm> {
+  // A company careers page with ?gh_jid= embeds a Greenhouse form, often late or behind buttons, and
+  // some of those sites refuse automated browsers. Going straight to the Greenhouse form comes first;
+  // the company page is only needed when that fails.
   if (site === "greenhouse" && !new URL(url).hostname.endsWith("greenhouse.io")) {
     const direct = await openGreenhouseDirect(page, url);
     if (direct) return direct;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
   }
+  await gotoWithRetry(page, url);
 
   // Greenhouse on a company's own site puts the form in an iframe (#grnhse_iframe).
   const embedded = page.locator("iframe#grnhse_iframe, iframe[src*='greenhouse.io']").first();
