@@ -192,6 +192,7 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
         const page = await env.context.newPage();
         try {
           const outcome = await applyOnPage(page, pick.job, {
+            company: pick.company,
             bank,
             ai: env.ai,
             dryRun: options.dryRun,
