@@ -10,7 +10,7 @@ import { aiMayAnswer, answerFor, matchRule, matcherKeys, type Answer, type Field
 import { hasCaptchaChallenge, openForm, submit, submitWithCode } from "./ats.js";
 import { checkLegalAnswers } from "./legal-check.js";
 import { fill, peekOptions, readFields, type FillResult } from "./page.js";
-import { findSaved, loadSavedAnswers } from "../saved-answers.js";
+import { findSaved, loadSavedAnswers, meansLetAi } from "../saved-answers.js";
 
 export type ApplyOutcome =
   | { outcome: "submitted"; filled: FillResult[]; evidence: string[]; aiAnswers: string[] }
@@ -38,11 +38,12 @@ export async function applyOnPage(
     profile?: unknown;
     /** The Dossier application this form belongs to, for answers you gave for it only. */
     applicationId?: string;
+    company?: string; // helps find the Greenhouse form behind a company careers page
     posting?: string;
   },
 ): Promise<ApplyOutcome> {
   const { bank, ai, dryRun, evidenceDir, log } = options;
-  const form = await openForm(page, job.site, job.applyUrl);
+  const form = await openForm(page, job.site, job.applyUrl, options.company);
   const evidence: string[] = [];
   const shot = async (name: string) => {
     const path = join(evidenceDir, `${name}.png`);
@@ -69,13 +70,16 @@ export async function applyOnPage(
       }
       let answer: Answer = answerFor(field, bank, key);
       // Your own answer (npm run pending) wins over everything except files and checkboxes.
-      const mine = field.kind === "file" ? undefined : findSaved(saved, field.label, options.applicationId);
+      const found = field.kind === "file" ? undefined : findSaved(saved, field.label, options.applicationId);
+      // You told the AI to answer this one ("ai" in npm run pending): it may, even for a question it would normally leave to you.
+      const letAi = Boolean(found && meansLetAi(found.answer));
+      const mine = letAi ? undefined : found;
       if (mine) answer = ["select", "radio", "checkboxes", "combobox"].includes(field.kind) ? { kind: "choice", prefer: [mine.answer.toLowerCase()] } : field.kind === "checkbox" ? (/^(y|yes|true|agree)/i.test(mine.answer) ? { kind: "check" } : { kind: "skip" }) : { kind: "text", value: mine.answer };
-      const canAi = Boolean(!mine && ai && options.profile && bank.ai_answers.enabled && field.label && aiMayAnswer(key, field));
+      const canAi = Boolean(!mine && ai && options.profile && bank.ai_answers.enabled && field.label && (letAi || aiMayAnswer(key, field)));
       const askAi = () => answerWithAi(form.frame, field, ai!, options.profile, options.posting ?? "", bank, aiAnswers, log);
       // Optional questions the bank doesn't know get answered too, except long free-text boxes (no filler under your name).
       const optionalUnknown = answer.kind === "skip" && key === null && field.kind !== "textarea";
-      if (canAi && (answer.kind === "needs_you" || optionalUnknown)) answer = await askAi();
+      if (canAi && (letAi || answer.kind === "needs_you" || optionalUnknown)) answer = await askAi();
       if (answer.kind === "needs_you" && !field.required) answer = { kind: "skip" };
       if (answer.kind === "file" && answer.which === "cover_letter" && !coverLetter && options.files.cover_letter) {
         try {

@@ -24,6 +24,18 @@ export function saveAnswers(answers: SavedAnswer[]): void {
   writeFileSync(FILE, header + stringify({ answers }));
 }
 
+/** A saved answer that hands the question to the AI ("ai", "let the AI answer", "write an answer based on my profile"). */
+export function meansLetAi(answer: string): boolean {
+  const a = answer.trim();
+  return (
+    /^(ai|claude)$/i.test(a) ||
+    /^(let|ask|use|have)\s+(the\s+)?(ai|claude)\b/i.test(a) ||
+    /\b(ai|claude)\b.*\b(write|answer|decide|fill|choose|pick)\b/i.test(a) ||
+    /\bwrite\s+(an?|the)\s+(\w+\s+)?answer\b/i.test(a) ||
+    /\bbased on my (profile|resume)\b/i.test(a)
+  );
+}
+
 /** Your saved answer for this question on this application, if any. */
 export function findSaved(answers: SavedAnswer[], question: string, applicationId?: string): SavedAnswer | undefined {
   const wanted = normalizeQuestion(question);

@@ -51,14 +51,18 @@ async function findApplicationForm(frame: Frame, timeoutMs: number): Promise<boo
  * page's Greenhouse embed script, then guesses from the site address
  * (acme.com → "acme", careers.globex-corp.com → "globexcorp").
  */
-export function greenhouseBoardGuesses(pageHtml: string, url: string): string[] {
+export function greenhouseBoardGuesses(pageHtml: string, url: string, company?: string): string[] {
   const found = [
     ...pageHtml.matchAll(/greenhouse\.io\/(?:embed\/job_board(?:\/js)?\?for=|embed\/job_app\?for=)([A-Za-z0-9_-]+)/g),
     ...pageHtml.matchAll(/job-boards\.greenhouse\.io\/([A-Za-z0-9_-]+)\/jobs/g),
     ...pageHtml.matchAll(/boards\.greenhouse\.io\/([A-Za-z0-9_-]+)\/jobs/g),
   ].map((m) => m[1]);
   const host = new URL(url).hostname.replace(/^(www|careers|jobs|cms|apply)\./, "").split(".")[0];
-  return [...new Set([...found, host, host.replace(/-/g, ""), `${host}inc`].filter((name) => name && name !== "embed"))];
+  // The company's name as Dossier lists it ("Toast" → toast, "Coalition, Inc." → coalitioninc, coalition).
+  const name = (company ?? "").toLowerCase().replace(/[^a-z0-9 ]/g, "");
+  const short = name.replace(/\b(inc|llc|ltd|corp|corporation|co|company|technologies|labs)\b/g, "").replace(/\s+/g, "");
+  const fromName = [name.replace(/\s+/g, ""), short];
+  return [...new Set([...found, host, ...fromName, host.replace(/-/g, ""), `${host}inc`].filter((n) => n && n !== "embed"))];
 }
 
 /** Tries Greenhouse addresses for one job; the first that shows the application form wins. */
@@ -82,14 +86,14 @@ const greenhouseUrls = (boards: string[], id: string) => [
 ];
 
 /** For a company page with ?gh_jid=, opens that job's form on Greenhouse itself; null if nothing works. */
-async function openGreenhouseDirect(page: Page, url: string): Promise<SiteForm | null> {
+async function openGreenhouseDirect(page: Page, url: string, company?: string): Promise<SiteForm | null> {
   const id = new URL(url).searchParams.get("gh_jid");
   if (!id) return null;
   const tried = new Set<string>();
 
   // 1. Board names guessed from the address alone, without opening the company's site at all
   //    (some career sites cut off automated browsers after a request or two).
-  const fromAddress = await tryGreenhouse(page, greenhouseUrls(greenhouseBoardGuesses("", url).slice(0, 3), id), tried);
+  const fromAddress = await tryGreenhouse(page, greenhouseUrls(greenhouseBoardGuesses("", url, company).slice(0, 4), id), tried);
   if (fromAddress) return fromAddress;
 
   // 2. The company page itself: the exact form it embeds, and the board name in its HTML.
@@ -103,7 +107,7 @@ async function openGreenhouseDirect(page: Page, url: string): Promise<SiteForm |
   } catch {
     return null; // the company page won't load either
   }
-  return tryGreenhouse(page, [...frameUrls, ...greenhouseUrls(greenhouseBoardGuesses(html, url).slice(0, 4), id)], tried);
+  return tryGreenhouse(page, [...frameUrls, ...greenhouseUrls(greenhouseBoardGuesses(html, url, company).slice(0, 5), id)], tried);
 }
 
 /** Opens a page, retrying once after a dropped connection (some career sites cut off automated browsers). */
@@ -118,12 +122,12 @@ async function gotoWithRetry(page: Page, url: string): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
 }
 
-export async function openForm(page: Page, site: Site, url: string): Promise<SiteForm> {
+export async function openForm(page: Page, site: Site, url: string, company?: string): Promise<SiteForm> {
   // A company careers page with ?gh_jid= embeds a Greenhouse form, often late or behind buttons, and
   // some of those sites refuse automated browsers. Going straight to the Greenhouse form comes first;
   // the company page is only needed when that fails.
   if (site === "greenhouse" && !new URL(url).hostname.endsWith("greenhouse.io")) {
-    const direct = await openGreenhouseDirect(page, url);
+    const direct = await openGreenhouseDirect(page, url, company);
     if (direct) return direct;
   }
   await gotoWithRetry(page, url);
