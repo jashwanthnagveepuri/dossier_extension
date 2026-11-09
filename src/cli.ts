@@ -249,6 +249,7 @@ async function sync() {
     for (const entry of env.ledger.all()) if (entry.applicationId) latest.set(entry.applicationId, entry);
     console.log(`Dossier has ${drafts.length} draft(s):\n`);
     const tally: Record<string, number> = {};
+    const manual: string[] = [];
     const note = (kind: string, row: DossierRow, detail: string) => {
       tally[kind] = (tally[kind] ?? 0) + 1;
       console.log(`  ${kind.padEnd(12)} ${(row.company ?? "?").slice(0, 24).padEnd(24)} ${(row.role ?? row.title ?? "").slice(0, 50).padEnd(50)} ${detail}`);
@@ -271,7 +272,9 @@ async function sync() {
       // Not in the ledger: a dry run, a try run, or a draft made in Dossier itself.
       const job = row.posting ? identify(row.posting) : null;
       if (!job || !env.settings.phase.sites.includes(job.site as never)) {
-        note("manual", row, job ? `${job.site} isn't automated yet; apply by hand or delete` : "no job link; apply by hand or delete");
+        const host = row.posting ? new URL(row.posting).hostname.replace(/^www\./, "") : "";
+        note("manual", row, row.posting ? `${host}: not automated yet; apply by hand or delete` : "no job link; apply by hand or delete");
+        manual.push(`| ${row.company ?? ""} | ${row.role ?? row.title ?? ""} | ${host} | ${row.posting ? `[open](${row.posting})` : ""} |`);
         continue;
       }
       const company = row.company ?? "";
@@ -289,6 +292,11 @@ async function sync() {
       }
       env.ledger.add({ key: job.key, company, title, by: "applier", outcome: "failed", reason: "Dossier draft never submitted (dry run or try run)", applicationId: row.id, url: row.posting });
       note("queued", row, "will be applied by npm run retry -- --all");
+    }
+    if (manual.length) {
+      const file = join(dataDir("reports"), `manual-${new Date().toISOString().slice(0, 10)}.md`);
+      writeFileSync(file, `# Drafts to apply to by hand\n\n| Company | Role | Site | Link |\n| --- | --- | --- | --- |\n${manual.join("\n")}\n`);
+      console.log(`\nLinks for the ${manual.length} manual draft(s): ${file}`);
     }
     console.log(`\nSummary: ${JSON.stringify(tally)}`);
     if (tally.queued || tally.waiting) console.log("Next: npm run retry -- --all");
