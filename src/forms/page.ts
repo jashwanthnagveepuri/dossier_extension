@@ -72,6 +72,12 @@ export async function readFields(frame: Frame, rootSelector: string): Promise<Fi
       // React-select keeps an invisible required <input aria-hidden tabindex=-1> next to each dropdown; it isn't a question.
       if (type !== "file" && (el.getAttribute("aria-hidden") === "true" || (el.getAttribute("tabindex") === "-1" && /requiredInput/i.test(el.className)))) continue;
       if (type !== "file" && !visible(el) && !(type === "radio" || type === "checkbox")) continue;
+      // Custom-styled radios and checkboxes hide the input itself, but a whole section that isn't displayed
+      // (the next page of a multi-page application) hides its label or fieldset too: those wait for their page.
+      if ((type === "radio" || type === "checkbox") && el.getClientRects().length === 0) {
+        const holder = el.closest("label, fieldset") ?? el.parentElement;
+        if (!holder || holder.getClientRects().length === 0) continue;
+      }
       if ((type === "radio" || type === "checkbox") && input.name) {
         const key = `${type}:${input.name}`;
         groups.set(key, [...(groups.get(key) ?? []), input]);
