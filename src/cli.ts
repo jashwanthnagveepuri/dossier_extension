@@ -96,7 +96,7 @@ function waitingOnYou(ledger: Ledger): LedgerEntry[] {
 }
 
 /** Fills and submits a stopped application from its existing Dossier draft (no second draft). */
-async function finish(env: Env, entry: LedgerEntry, dryRun: boolean): Promise<"submitted" | "needs-you" | "dry-run"> {
+async function finish(env: Env, entry: LedgerEntry, dryRun: boolean): Promise<"submitted" | "needs-you" | "dry-run" | "skipped"> {
   const job = identify(entry.url ?? "");
   if (!job || !entry.applicationId) throw new Error(`Can't read the job link ${entry.url}`);
   env.log(`Finishing ${entry.company}: ${entry.title}`);
@@ -106,7 +106,14 @@ async function finish(env: Env, entry: LedgerEntry, dryRun: boolean): Promise<"s
     const posting = await dossier.call<{ text: string }>("get_posting", { posting_url: entry.url }).then((p) => p.text).catch(() => "");
     const gmail = env.settings.gmail.enabled ? await gmailClient(env.settings.gmail.client_file, systemOpener(env.log)) : null;
     const evidenceDir = dataDir("evidence", `retry_${Date.now()}`);
-    const resume = await env.pdf.download({ doc: "resume", application: entry.applicationId }, evidenceDir, documentName(env.bank, "Resume"));
+    const resume = await env.pdf.download({ doc: "resume", application: entry.applicationId }, evidenceDir, documentName(env.bank, "Resume")).catch((error) => {
+      if (!/no longer exists/i.test(String(error))) throw error;
+      // You deleted it in Dossier: stop offering it.
+      env.ledger.add({ key: entry.key, company: entry.company, title: entry.title, by: "applier", outcome: "skipped", reason: "deleted in Dossier", applicationId: entry.applicationId, url: entry.url });
+      console.log("  Deleted in Dossier, so it won't come up again.");
+      return null;
+    });
+    if (!resume) return "skipped";
     const page = await env.context.newPage();
     const outcome = await applyOnPage(page, job, {
       bank: env.bank,
@@ -117,6 +124,7 @@ async function finish(env: Env, entry: LedgerEntry, dryRun: boolean): Promise<"s
       profile,
       posting,
       applicationId: entry.applicationId,
+      company: entry.company,
       getCode: gmail ? (since) => waitForSecurityCode(gmail, since, { company: entry.company, used: USED_CODES }) : undefined,
       files: { resume, cover_letter: () => env.pdf.download({ doc: "letter", application: entry.applicationId! }, evidenceDir, documentName(env.bank, "Cover_Letter")) },
     });
@@ -183,7 +191,7 @@ async function pending() {
   const saved = loadSavedAnswers();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const ready: LedgerEntry[] = [];
-  console.log(`${waiting.length} application(s) are waiting on you. Press Enter on a question to skip that application for now.\n`);
+  console.log(`${waiting.length} application(s) are waiting on you. Press Enter on a question to skip that application for now.\nType ai as your answer to let the AI answer that question from your profile.\n`);
   for (const entry of waiting) {
     console.log(`── ${entry.company}: ${entry.title}\n   ${entry.url}`);
     // Older entries only have the reason text: "<question>: <why>; <question>: <why>".

@@ -350,3 +350,16 @@ describe("race questions that split a race into subgroups", () => {
     expect(answerFor(f, withDetail, "race")).toMatchObject({ kind: "choice", prefer: ["south asian", bank.voluntary_self_identification.race.toLowerCase()] });
   });
 });
+
+describe("saved answers that hand a question to the AI", () => {
+  it("recognises them, and nothing else", async () => {
+    const { meansLetAi } = await import("../src/saved-answers.js");
+    for (const yes of ["ai", "AI", "Ask the AI to write the answer", "Write an appropriate answer based on my profile", "let claude answer", "use the AI"]) expect(meansLetAi(yes)).toBe(true);
+    for (const no of ["No", "Yes", "Careers Website", "3-5 years", "I build AI tools at work daily"]) expect(meansLetAi(no)).toBe(false);
+  });
+  it("guesses Greenhouse boards from the company name", async () => {
+    const { greenhouseBoardGuesses } = await import("../src/forms/ats.js");
+    expect(greenhouseBoardGuesses("", "https://careers.acmetab.com/jobs?gh_jid=1", "Acme")).toContain("acme");
+    expect(greenhouseBoardGuesses("", "https://www.globex.com/job-posting?gh_jid=1", "Globex, Inc.")).toEqual(expect.arrayContaining(["globexinc", "globex"]));
+  });
+});
