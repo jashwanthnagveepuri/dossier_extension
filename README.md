@@ -10,7 +10,7 @@ Dossier search ──► filter ──► score ──► pick (daily cap) ─�
                     a question only you can answer / CAPTCHA / error ───────────────────────────────┴──► stays Draft → npm run pending
 ```
 
-Supports **Greenhouse and Lever** forms (including company career pages that embed them). Workday and other sites are found but skipped for now.
+Supports **Greenhouse, Lever and Ashby** forms, and **any other company career site**: it clicks Apply (following new tabs and hand-offs), fills multi-page applications page by page, and submits. Sites that need an account or sign-in (most Workday sites) and job-board reposts (Adzuna, WhatJobs, LinkedIn, Indeed…) are left for you. Turn sites on or off in `config/settings.yaml` → `phase.sites`.
 
 > **Easiest way to set it up:** open [AI_SETUP_PROMPT.md](AI_SETUP_PROMPT.md), copy the prompt into Claude, ChatGPT or any AI assistant, and it walks you through every step below one question at a time, including writing your answer bank for you.
 
