@@ -7,7 +7,7 @@ import { applyOnPage, describeFilled } from "./forms/apply.js";
 import { gmailClient, waitForSecurityCode } from "./gmail.js";
 import { Ledger } from "./ledger.js";
 import { opener, openEnv, run, systemOpener } from "./run.js";
-import { identify } from "./select/canonical.js";
+import { identify, isRepost } from "./select/canonical.js";
 import { hardSkip } from "./select/filters.js";
 import { createInterface } from "node:readline/promises";
 import { aiMayAnswer } from "./forms/answers.js";
@@ -271,9 +271,9 @@ async function sync() {
       }
       // Not in the ledger: a dry run, a try run, or a draft made in Dossier itself.
       const job = row.posting ? identify(row.posting) : null;
-      if (!job || !env.settings.phase.sites.includes(job.site as never)) {
+      if (!job || !env.settings.phase.sites.includes(job.site as never) || isRepost(job.applyUrl)) {
         const host = row.posting ? new URL(row.posting).hostname.replace(/^www\./, "") : "";
-        note("manual", row, row.posting ? `${host}: not automated yet; apply by hand or delete` : "no job link; apply by hand or delete");
+        note("manual", row, !row.posting ? "no job link; apply by hand or delete" : isRepost(row.posting) ? `${host}: a job board's repost; apply on the employer's site or delete` : `${host}: turned off in settings.yaml (phase.sites)`);
         manual.push(`| ${row.company ?? ""} | ${row.role ?? row.title ?? ""} | ${host} | ${row.posting ? `[open](${row.posting})` : ""} |`);
         continue;
       }
