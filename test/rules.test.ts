@@ -363,3 +363,16 @@ describe("saved answers that hand a question to the AI", () => {
     expect(greenhouseBoardGuesses("", "https://www.globex.com/job-posting?gh_jid=1", "Globex, Inc.")).toEqual(expect.arrayContaining(["globexinc", "globex"]));
   });
 });
+
+describe("Ashby links and job-board reposts", () => {
+  it("identifies Ashby jobs and their application page", async () => {
+    const { identify, isRepost } = await import("../src/select/canonical.js");
+    const job = identify("https://jobs.ashbyhq.com/acme/0b6f4f43-1d0e-4c6e-9d3a-5c1f0e2b7a11?utm_source=x");
+    expect(job).toMatchObject({ site: "ashby", key: "ashby:acme:0b6f4f43-1d0e-4c6e-9d3a-5c1f0e2b7a11", applyUrl: "https://jobs.ashbyhq.com/acme/0b6f4f43-1d0e-4c6e-9d3a-5c1f0e2b7a11/application" });
+    expect(identify("https://careers.acme.com/jobs?ashby_jid=0b6f4f43-1d0e-4c6e-9d3a-5c1f0e2b7a11")?.site).toBe("ashby");
+    expect(identify("https://careers.acme.com/jobs/123")?.site).toBe("other");
+    expect(isRepost("https://www.adzuna.com/details/123")).toBe(true);
+    expect(isRepost("https://www.whatjobs.com/job/1")).toBe(true);
+    expect(isRepost("https://careers.acme.com/jobs/123")).toBe(false);
+  });
+});

@@ -12,7 +12,7 @@ import { applyOnPage, describeFilled } from "./forms/apply.js";
 import { PAGE_SHIM } from "./forms/page.js";
 import { gmailClient, syncConfirmations, waitForSecurityCode } from "./gmail.js";
 import { Ledger } from "./ledger.js";
-import { identify, type JobIdentity } from "./select/canonical.js";
+import { identify, type JobIdentity, isRepost } from "./select/canonical.js";
 import { hardSkip, pickToday } from "./select/filters.js";
 
 /** Scoring costs a Claude call each; this bounds one run. */
@@ -121,7 +121,7 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
       for (const posting of result.postings) {
         const job = posting.url ? identify(posting.url) : null;
         if (!job) continue;
-        if (!settings.phase.sites.includes(job.site)) {
+        if (!settings.phase.sites.includes(job.site) || isRepost(job.applyUrl)) {
           const where = job.site === "other" ? new URL(job.applyUrl).hostname.replace(/^www\./, "") : job.site;
           skippedSites[where] = (skippedSites[where] ?? 0) + 1;
           continue;
@@ -135,8 +135,8 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
       }
     }
     const otherSites = Object.entries(skippedSites).sort((a, b) => b[1] - a[1]);
-    log(`Found ${candidates.length} new postings on ${settings.phase.sites.join(" and ")}.`);
-    if (otherSites.length) log(`Left for later phases (${otherSites.reduce((sum, [, n]) => sum + n, 0)}): ${otherSites.slice(0, 12).map(([site, n]) => `${site} ${n}`).join(", ")}`);
+    log(`Found ${candidates.length} new postings on ${settings.phase.sites.join(", ")}.`);
+    if (otherSites.length) log(`Not applied through (${otherSites.reduce((sum, [, n]) => sum + n, 0)}, job-board reposts or sites turned off in settings.yaml): ${otherSites.slice(0, 12).map(([site, n]) => `${site} ${n}`).join(", ")}`);
     log(`Checking and scoring them now (about 5–15 seconds each, nothing shows in the browser yet)…`);
 
     // ---- Filter and score ----

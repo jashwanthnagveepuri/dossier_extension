@@ -26,7 +26,7 @@ browser:
   slow_mo_ms: 40                      # small delay between actions, so forms behave like a person typed them
 
 phase:
-  sites: [greenhouse, lever]          # Phase 1. Workday and other career pages come in later phases.
+  sites: [greenhouse, lever, ashby, other, workday]   # other = any company career site; remove one to stop applying there
 
 gmail:
   enabled: true

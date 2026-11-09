@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Acme Careers – Software Engineer</title>
+<style>.hidden{display:none} label{display:block;margin-top:8px} #cookies{position:fixed;bottom:0;left:0;right:0;background:#eee;padding:12px}</style></head>
+<body>
+<!-- A career site with no <form> element: job page → Apply → two pages → submit. -->
+<div id="cookies">We use cookies. <button id="accept" onclick="this.parentNode.remove()">Accept all</button></div>
+<section id="job">
+  <h1>Software Engineer</h1>
+  <p>Build backend services in Java and Spring Boot.</p>
+  <button id="apply" onclick="document.getElementById('job').classList.add('hidden');document.getElementById('step1').classList.remove('hidden')">Apply now</button>
+</section>
+<section id="step1" class="hidden">
+  <h2>Your details</h2>
+  <label for="fn">First name *</label><input id="fn" name="firstName" required>
+  <label for="ln">Last name *</label><input id="ln" name="lastName" required>
+  <label for="em">Email *</label><input id="em" name="email" type="email" required>
+  <label for="ph">Phone *</label><input id="ph" name="phone" required>
+  <label for="cv">Resume / CV *</label><input id="cv" name="resume" type="file" required>
+  <button id="next" type="button" onclick="
+    var ok=['fn','ln','em','ph'].every(function(id){return document.getElementById(id).value});
+    if(!ok||!document.getElementById('cv').files.length){document.getElementById('err1').textContent='Please fill in all required fields';return}
+    document.getElementById('step1').classList.add('hidden');document.getElementById('step2').classList.remove('hidden')">Next</button>
+  <div id="err1" class="error"></div>
+</section>
+<section id="step2" class="hidden">
+  <h2>A few questions</h2>
+  <label for="auth">Are you legally authorized to work in the United States? *</label>
+  <select id="auth" required><option value="">Select…</option><option>Yes</option><option>No</option></select>
+  <fieldset><legend>Will you now or in the future require sponsorship for employment visa status? *</legend>
+    <label><input type="radio" name="sp" value="Yes" required> Yes</label>
+    <label><input type="radio" name="sp" value="No"> No</label></fieldset>
+  <label for="li">LinkedIn profile</label><input id="li" name="linkedin">
+  <button id="submit" type="button" onclick="
+    if(!document.getElementById('auth').value||!document.querySelector('input[name=sp]:checked')){document.getElementById('err2').textContent='This field is required';return}
+    document.body.innerHTML='<h1>Thank you for applying!</h1><p>We have received your application.</p>'">Submit application</button>
+  <div id="err2" class="error"></div>
+</section>
+<script>
+  if (location.search.includes("direct")) { document.getElementById('job').classList.add('hidden'); document.getElementById('step1').classList.remove('hidden'); }
+</script>
+</body></html>

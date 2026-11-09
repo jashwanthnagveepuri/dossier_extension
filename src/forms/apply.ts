@@ -7,7 +7,7 @@ import type { Ai } from "../ai.js";
 import type { AnswerBank } from "../config.js";
 import type { JobIdentity } from "../select/canonical.js";
 import { aiMayAnswer, answerFor, matchRule, matcherKeys, type Answer, type Field } from "./answers.js";
-import { hasCaptchaChallenge, openForm, submit, submitWithCode } from "./ats.js";
+import { goToNextStep, hasCaptchaChallenge, openForm, SiteBlocked, submit, submitWithCode, type SiteForm } from "./ats.js";
 import { checkLegalAnswers } from "./legal-check.js";
 import { fill, peekOptions, readFields, type FillResult } from "./page.js";
 import { findSaved, loadSavedAnswers, meansLetAi } from "../saved-answers.js";
@@ -43,7 +43,18 @@ export async function applyOnPage(
   },
 ): Promise<ApplyOutcome> {
   const { bank, ai, dryRun, evidenceDir, log } = options;
-  const form = await openForm(page, job.site, job.applyUrl, options.company);
+  const evidenceEarly: string[] = [];
+  let form: SiteForm;
+  try {
+    form = await openForm(page, job.site, job.applyUrl, options.company);
+  } catch (error) {
+    if (!(error instanceof SiteBlocked)) throw error;
+    const path = join(evidenceDir, "blocked.png");
+    await page.screenshot({ path, fullPage: true }).catch(() => undefined);
+    evidenceEarly.push(path);
+    log(`  ✋ ${error.message}`);
+    return { outcome: "needs-you", why: [error.message], questions: [], filled: [], evidence: evidenceEarly, aiAnswers: [] };
+  }
   const evidence: string[] = [];
   const shot = async (name: string) => {
     const path = join(evidenceDir, `${name}.png`);
@@ -57,7 +68,11 @@ export async function applyOnPage(
   const done = new Set<string>();
   let coverLetter: string | undefined;
 
-  // Two passes: answering some questions reveals follow-up questions.
+  const blocking: string[] = [];
+  // Most forms are one page; some career sites split the application over several (Next / Continue).
+  for (let step = 0; step < 10; step++) {
+  const stepStart = filled.length;
+  // Several passes: answering some questions reveals follow-up questions.
   for (let pass = 0; pass < 3; pass++) {
     if (pass > 0) await page.waitForTimeout(800); // follow-up questions render a moment after an answer
     const fields = (await readFields(form.frame, form.root)).filter((field) => !done.has(field.id));
@@ -103,17 +118,27 @@ export async function applyOnPage(
     if (fields.length === 0) break;
   }
 
-  const open = filled.filter((result) => !result.ok && result.field.required);
-  const questions = open.filter((result) => result.field.label).map((result) => ({ label: result.field.label, options: result.field.options.slice(0, 30) }));
-  const blocking = open.map((result) => `${result.field.label.slice(0, 100)}: ${result.detail}`);
-  if (!filled.some((result) => result.ok && result.field.kind === "file")) blocking.push("no resume upload field was filled");
+  // This page's own checks, while its answers are still on screen.
+  const stepFilled = filled.slice(stepStart);
+  blocking.push(...stepFilled.filter((result) => !result.ok && result.field.required).map((result) => `${result.field.label.slice(0, 100)}: ${result.detail}`));
   if (await hasCaptchaChallenge(form.frame)) blocking.push("a CAPTCHA is on the page");
-  // Independent last check: what the page shows for every legal question must match your answer bank.
-  const legal = await checkLegalAnswers(form.frame, filled, bank);
+  // Independent check: what the page shows for every legal question must match your answer bank.
+  const legal = await checkLegalAnswers(form.frame, stepFilled, bank);
   if (legal.length) {
     blocking.push(...legal);
     legal.forEach((line) => log(`  ✗ ${line}`));
   }
+  if (blocking.length) break;
+  const next = await goToNextStep(form);
+  if (!next) break; // the last page: submit happens below
+  await shot(`page-${step + 1}`);
+  log(`  next page of the application`);
+  form = next;
+  }
+
+  const open = filled.filter((result) => !result.ok && result.field.required);
+  const questions = open.filter((result) => result.field.label).map((result) => ({ label: result.field.label, options: result.field.options.slice(0, 30) }));
+  if (!blocking.length && !filled.some((result) => result.ok && result.field.kind === "file")) blocking.push("no resume upload field was filled");
 
   if (aiAnswers.length) writeFileSync(join(evidenceDir, "ai-answers.txt"), aiAnswers.join("\n\n"));
   await shot("filled");

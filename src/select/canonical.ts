@@ -2,8 +2,23 @@
 // LinkedIn, Indeed and the company's site can all list the same Greenhouse
 // job; they share one key here, so it's never applied to twice.
 
-export type Site = "greenhouse" | "lever" | "workday" | "other";
+export type Site = "greenhouse" | "lever" | "ashby" | "workday" | "other";
 export type JobIdentity = { site: Site; key: string; applyUrl: string };
+
+/**
+ * Job boards that repost other companies' jobs. Their Apply buttons lead to sign-ups and
+ * redirect chains, not to the employer's form, so they're never applied through.
+ */
+const REPOST_HOSTS = /(^|\.)(adzuna\.[a-z.]+|whatjobs\.com|himalayas\.app|torre\.ai|jooble\.org|lensa\.com|talent\.com|ziprecruiter\.com|indeed\.com|linkedin\.com|glassdoor\.com|monster\.com|simplyhired\.com|careerbuilder\.com|remotejobs\w*\.\w+|remoteok\.com|weworkremotely\.com|jobgether\.com|talentify\.io|dice\.com|builtin\.com|wellfound\.com|otta\.com)$/i;
+
+/** Whether a link points at a job board's repost rather than the employer. */
+export function isRepost(rawUrl: string): boolean {
+  try {
+    return REPOST_HOSTS.test(new URL(rawUrl).hostname);
+  } catch {
+    return false;
+  }
+}
 
 export function identify(rawUrl: string): JobIdentity | null {
   let url: URL;
@@ -37,6 +52,14 @@ export function identify(rawUrl: string): JobIdentity | null {
     }
   }
 
+  // jobs.ashbyhq.com/{org}/{uuid}[/application]
+  if (host === "jobs.ashbyhq.com" && parts[0] && parts[1] && /^[0-9a-f-]{36}$/i.test(parts[1])) {
+    return { site: "ashby", key: `ashby:${parts[0].toLowerCase()}:${parts[1].toLowerCase()}`, applyUrl: `https://jobs.ashbyhq.com/${parts[0]}/${parts[1]}/application` };
+  }
+  // A company page with ?ashby_jid= embeds an Ashby form.
+  const ashbyJid = url.searchParams.get("ashby_jid");
+  if (ashbyJid && /^[0-9a-f-]{36}$/i.test(ashbyJid)) return { site: "ashby", key: `ashby:?:${ashbyJid.toLowerCase()}`, applyUrl: url.toString() };
+
   // {tenant}.wd{n}.myworkdayjobs.com/.../job/.../{title}_{R-12345}
   if (host.endsWith("myworkdayjobs.com") || host.endsWith("myworkdaysite.com")) {
     const tenant = host.split(".")[0];
@@ -61,5 +84,5 @@ export function sameJob(a: string, b: string): boolean {
   if (a === b) return true;
   const [siteA, boardA, idA] = a.split(":");
   const [siteB, boardB, idB] = b.split(":");
-  return siteA === "greenhouse" && siteB === "greenhouse" && idA === idB && (boardA === "?" || boardB === "?");
+  return siteA === siteB && (siteA === "greenhouse" || siteA === "ashby") && idA === idB && (boardA === "?" || boardB === "?");
 }

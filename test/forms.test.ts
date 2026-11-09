@@ -200,3 +200,32 @@ describe("legal check before submit", () => {
     await page.close();
   });
 });
+
+describe("any other career site", () => {
+  it("clicks Apply, fills a two-page application with no <form>, and submits", async () => {
+    const page = await context.newPage();
+    const outcome = await applyOnPage(page, { site: "other", key: "t", applyUrl: fixture("career-site.html") }, { bank, ai: null, dryRun: false, evidenceDir: dir, log: () => undefined, files: { resume } });
+    if (outcome.outcome === "needs-you") throw new Error(outcome.why.join("; "));
+    expect(outcome.outcome).toBe("submitted");
+    expect(await page.locator("body").innerText()).toContain("Thank you for applying");
+    const labels = outcome.filled.filter((r) => r.ok).map((r) => r.field.label);
+    expect(labels.some((l) => /authorized/i.test(l))).toBe(true);
+    expect(labels.some((l) => /sponsorship/i.test(l))).toBe(true);
+  });
+
+  it("follows an Apply link that opens a new tab", async () => {
+    const page = await context.newPage();
+    const outcome = await applyOnPage(page, { site: "other", key: "t", applyUrl: fixture("career-newtab.html") }, { bank, ai: null, dryRun: true, evidenceDir: dir, log: () => undefined, files: { resume } });
+    if (outcome.outcome === "needs-you") throw new Error(outcome.why.join("; "));
+    expect(outcome.outcome).toBe("dry-run");
+    expect(page.url()).toContain("career-site.html");
+    expect(await value(page, "#fn")).toBe("Alex");
+  });
+
+  it("stops at a sign-in wall instead of making an account", async () => {
+    const page = await context.newPage();
+    const outcome = await applyOnPage(page, { site: "other", key: "t", applyUrl: fixture("career-signin.html") }, { bank, ai: null, dryRun: false, evidenceDir: dir, log: () => undefined, files: { resume } });
+    expect(outcome.outcome).toBe("needs-you");
+    if (outcome.outcome === "needs-you") expect(outcome.why.join(" ")).toMatch(/account or sign-in/);
+  });
+});
