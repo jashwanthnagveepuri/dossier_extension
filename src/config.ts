@@ -117,7 +117,7 @@ export const settingsSchema = z.object({
     queries: z.array(text).min(1),
   }),
   browser: z.object({ headless: z.boolean(), slow_mo_ms: z.number().int().min(0) }),
-  phase: z.object({ sites: z.array(z.enum(["greenhouse", "lever", "workday", "other"])) }),
+  phase: z.object({ sites: z.array(z.enum(["greenhouse", "lever", "ashby", "workday", "other"])) }),
   gmail: z.object({ enabled: z.boolean(), client_file: text, lookback_days: z.number().int().min(1) }),
 });
 export type Settings = z.infer<typeof settingsSchema>;
