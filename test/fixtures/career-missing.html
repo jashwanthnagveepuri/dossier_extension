@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Umbrella – Backend Engineer</title>
+<style>.sr{position:absolute;left:-9999px} label{display:block}</style></head>
+<body>
+<!-- Like Ramp/Uber: an off-screen terms checkbox, a payroll question not marked required,
+     and a location-preference list whose question isn't tied to its boxes. Submit lists what's missing. -->
+<form id="app" onsubmit="return false">
+  <label for="name">Legal Name</label><input id="name" required>
+  <label for="email">Email</label><input id="email" type="email" required>
+  <label for="cv">Resume</label><input id="cv" type="file" required>
+  <label for="payroll">Where do you plan on working from (for payroll tax purposes)?</label><input id="payroll">
+  <div class="q">What is your location preference?</div>
+  <div class="opts">
+    <div><input type="checkbox" id="l1" name="loc_nyc"><label for="l1">NYC</label></div>
+    <div><input type="checkbox" id="l2" name="loc_us"><label for="l2">Remote - US</label></div>
+    <div><input type="checkbox" id="l3" name="loc_ca"><label for="l3">Remote - Canada</label></div>
+    <div><input type="checkbox" id="l4" name="loc_intl"><label for="l4">Remote - All Other International</label></div>
+  </div>
+  <div><input type="checkbox" id="terms" class="sr" required><label for="terms">I agree with the terms and conditions</label></div>
+  <button type="submit" id="go" onclick="
+    var miss=[];
+    if(!document.getElementById('payroll').value) miss.push('Where do you plan on working from (for payroll tax purposes)?');
+    if(!document.querySelector('.opts input:checked')) miss.push('What is your location preference?');
+    if(!document.getElementById('terms').checked) miss.push('I agree with the terms and conditions');
+    if(miss.length){document.getElementById('err').innerText='Your form needs corrections\n\n'+miss.map(function(m){return 'Missing entry for required field: '+m}).join('\n\n');return}
+    document.body.innerHTML='<h1>Thank you for applying</h1><p id=sel>'+Array.from(document.querySelectorAll('.opts input:checked')).map(function(i){return i.id}).join(',')+'</p>'">Submit Application</button>
+  <div id="err" class="error"></div>
+</form>
+</body></html>

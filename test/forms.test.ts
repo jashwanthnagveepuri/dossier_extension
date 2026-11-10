@@ -229,3 +229,62 @@ describe("any other career site", () => {
     if (outcome.outcome === "needs-you") expect(outcome.why.join(" ")).toMatch(/account or sign-in/);
   });
 });
+
+describe("what Ramp and Uber forms showed", () => {
+  it("ticks an off-screen box, answers the questions the site says are missing, and resubmits", async () => {
+    const page = await context.newPage();
+    let picked = "";
+    page.on("domcontentloaded", () => undefined);
+    const outcome = await applyOnPage(page, { site: "other", key: "t", applyUrl: fixture("career-missing.html") }, { bank, ai: null, dryRun: false, evidenceDir: dir, log: () => undefined, files: { resume } });
+    if (outcome.outcome === "needs-you") throw new Error(outcome.why.join("; "));
+    expect(outcome.outcome).toBe("submitted");
+    picked = await page.locator("#sel").innerText();
+    expect(picked).toContain("l2"); // Remote - US
+    expect(picked).not.toContain("l3"); // not Canada
+    expect(picked).not.toContain("l4"); // not international
+  });
+});
+
+describe("helping a stuck application from the terminal", () => {
+  it("waits while you fill what it couldn't, then carries on and submits", async () => {
+    const page = await context.newPage();
+    const prompts: string[] = [];
+    const outcome = await applyOnPage(page, { site: "other", key: "t", applyUrl: `${fixture("career-site.html")}?direct` }, {
+      bank,
+      ai: null,
+      dryRun: false,
+      evidenceDir: dir,
+      log: () => undefined,
+      files: { resume },
+      assist: async (message) => {
+        prompts.push(message);
+        return "";
+      },
+    });
+    // The two-page practice form needs no help, so no pause; it still submits.
+    expect(outcome.outcome).toBe("submitted");
+    expect(prompts.length).toBe(0);
+  });
+
+  it("pauses on an unknown required question and submits after you answer it", async () => {
+    const page = await context.newPage();
+    const prompts: string[] = [];
+    const outcome = await applyOnPage(page, { site: "lever", key: "t", applyUrl: fixture("lever.html") }, {
+      bank,
+      ai: null,
+      dryRun: false,
+      evidenceDir: dir,
+      log: () => undefined,
+      files: { resume },
+      assist: async (message) => {
+        prompts.push(message);
+        // You answer the question it couldn't, in the browser.
+        for (const box of await page.locator("textarea:visible, input[type='text']:visible").all()) if (!(await box.inputValue())) await box.fill("My own answer");
+        return "";
+      },
+    });
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(prompts[0]).toMatch(/Stuck on this page/);
+    expect(outcome.outcome).toBe("submitted");
+  });
+});
