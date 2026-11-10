@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -29,6 +30,26 @@ export type Env = {
   log: (line: string) => void;
   close: () => Promise<void>;
 };
+
+/**
+ * Lets you help a stuck application from the terminal, when you're there: shows what's stuck and
+ * waits for Enter (carry on), "s" (skip) or y/n. A scheduled run has no terminal and never waits;
+ * after browser.wait_for_me_minutes with no reply it skips.
+ */
+export function assistant(settings: Settings): ((message: string) => Promise<string>) | undefined {
+  if (!process.stdin.isTTY || !settings.browser.wait_for_me || settings.browser.headless) return undefined;
+  return async (message) => {
+    process.stdout.write("\u0007"); // a beep, in case you're in another window
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const timer = new Promise<string>((resolve) => setTimeout(() => resolve("s"), settings.browser.wait_for_me_minutes * 60_000).unref());
+    try {
+      const reply = await Promise.race([rl.question(`  ✋ ${message}`), timer]);
+      return reply.trim().toLowerCase();
+    } finally {
+      rl.close();
+    }
+  };
+}
 
 export async function openEnv(options: { headed?: boolean } = {}): Promise<Env> {
   loadEnv();
@@ -194,6 +215,7 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
         try {
           const outcome = await applyOnPage(page, pick.job, {
             company: pick.company,
+            assist: options.dryRun ? undefined : assistant(settings),
             bank,
             ai: env.ai,
             dryRun: options.dryRun,

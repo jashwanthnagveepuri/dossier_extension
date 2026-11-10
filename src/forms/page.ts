@@ -59,8 +59,14 @@ export async function readFields(frame: Frame, rootSelector: string): Promise<Fi
       }
       return clean(el.getAttribute("placeholder") || el.getAttribute("name") || "");
     };
+    // Some sites mark required questions only with a class on the label (Ashby: "_required_…").
+    const labelMarked = (el: Element) => {
+      const labels = Array.from((el as HTMLInputElement).labels ?? []);
+      const near = el.closest("fieldset, [class*='field' i], [class*='question' i]");
+      return labels.some((l) => /required/i.test(l.className)) || Boolean(near?.querySelector(":scope > label[class*='required' i], :scope > legend[class*='required' i], :scope > [class*='label' i][class*='required' i]"));
+    };
     const isRequired = (el: Element, label: string) =>
-      (el as HTMLInputElement).required || el.getAttribute("aria-required") === "true" || /[*✱]\s*$|\(required\)/i.test(label);
+      (el as HTMLInputElement).required || el.getAttribute("aria-required") === "true" || /[*✱]\s*$|\(required\)/i.test(label) || labelMarked(el);
 
     const out: RawField[] = [];
     const groups = new Map<string, HTMLInputElement[]>();
@@ -108,7 +114,7 @@ export async function readFields(frame: Frame, rootSelector: string): Promise<Fi
         id: groupId,
         kind,
         label,
-        required: inputs.some((input) => input.required || input.getAttribute("aria-required") === "true") || /[*✱]\s*$|\(required\)/i.test(label),
+        required: inputs.some((input) => input.required || input.getAttribute("aria-required") === "true" || labelMarked(input)) || /[*✱]\s*$|\(required\)/i.test(label),
         options: kind === "checkbox" ? [] : inputs.map(optionText),
         name: first.name,
       });
@@ -121,6 +127,69 @@ export async function readFields(frame: Frame, rootSelector: string): Promise<Fi
 export type FillResult = { field: Field; ok: boolean; detail?: string };
 
 /** Puts one answer into one field. Never types anything that isn't the answer. */
+/**
+ * Ticks a checkbox or radio. Sites often move the real input off-screen and draw their own,
+ * so after a normal check it falls back to its label, then to a script click (which fires the
+ * same events a person's click does).
+ */
+async function tick(frame: Frame, box: Locator): Promise<void> {
+  await box.scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+  if (await box.check({ force: true, timeout: 4_000 }).then(() => true, () => false)) return;
+  const id = await box.getAttribute("id").catch(() => null);
+  const label = id ? frame.locator(`label[for="${id.replace(/"/g, '\\"')}"]`).first() : box.locator("xpath=ancestor::label[1]");
+  if ((await label.count()) && (await label.click({ timeout: 3_000 }).then(() => true, () => false)) && (await box.isChecked().catch(() => false))) return;
+  await box.evaluate((el) => {
+    const input = el as HTMLInputElement;
+    if (!input.checked) input.click();
+  });
+  if (!(await box.isChecked().catch(() => false))) throw new Error("the box wouldn't tick");
+}
+
+/**
+ * The field(s) for a question named in words (a site's "Missing entry for required field: …"),
+ * found by its text on the page: the question's own inputs, as one field marked required.
+ */
+export async function fieldsForQuestion(frame: Frame, question: string): Promise<Field[]> {
+  const found = await frame.evaluate((q: string) => {
+    const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+    const start = clean(q).slice(0, 45).toLowerCase();
+    const holders = Array.from(document.querySelectorAll("label, legend, p, span, div, h3, h4")).filter((el) => {
+      const text = clean((el as HTMLElement).innerText || "").toLowerCase();
+      return text.startsWith(start) && text.length < q.length + 60;
+    });
+    const textEl = holders.find((el) => !holders.some((other) => other !== el && el.contains(other)));
+    if (!textEl) return null;
+    const fieldsIn = (node: Element) => Array.from(node.querySelectorAll("input:not([type='hidden']):not([type='submit']):not([type='button']), select, textarea, [role='combobox']")).filter((f) => !textEl.contains(f) || textEl.tagName === "LABEL");
+    let root: Element | null = textEl;
+    for (let depth = 0; root && depth < 6 && fieldsIn(root).length === 0; depth++) root = root.parentElement;
+    if (!root) return null;
+    const inputs = fieldsIn(root) as HTMLInputElement[];
+    const store = window as unknown as { __applierCounter?: number };
+    const tag = (el: Element) => {
+      const existing = el.getAttribute("data-applier-id");
+      if (existing) return existing;
+      store.__applierCounter = (store.__applierCounter ?? 0) + 1;
+      el.setAttribute("data-applier-id", `f${store.__applierCounter}`);
+      return `f${store.__applierCounter}`;
+    };
+    const boxes = inputs.filter((i) => i.type === "checkbox" || i.type === "radio");
+    if (boxes.length > 0) {
+      const optionText = (i: HTMLInputElement) => clean(Array.from(i.labels ?? []).map((l) => l.innerText).join(" ") || (i.parentElement as HTMLElement | null)?.innerText || i.value);
+      const groupId = `q${tag(boxes[0])}`;
+      boxes.forEach((b) => {
+        b.setAttribute("data-applier-group", groupId);
+        b.setAttribute("data-applier-option", optionText(b));
+      });
+      return { id: groupId, kind: boxes[0].type === "radio" ? "radio" : boxes.length > 1 ? "checkboxes" : "checkbox", options: boxes.map(optionText) };
+    }
+    const first = inputs[0];
+    const kind = first.tagName === "SELECT" ? "select" : first.tagName === "TEXTAREA" ? "textarea" : first.getAttribute("role") === "combobox" ? "combobox" : "text";
+    return { id: tag(first), kind, options: first.tagName === "SELECT" ? Array.from((first as unknown as HTMLSelectElement).options).map((o) => clean(o.text)).filter(Boolean) : [] };
+  }, question);
+  if (!found) return [];
+  return [{ id: found.id, kind: found.kind as FieldKind, label: question, required: true, options: found.options }];
+}
+
 export async function fill(frame: Frame, field: Field, answer: Answer, files: { resume: string; cover_letter?: string }): Promise<FillResult> {
   const el = frame.locator(`[data-applier-id="${field.id}"]`).first();
   try {
@@ -140,14 +209,34 @@ export async function fill(frame: Frame, field: Field, answer: Answer, files: { 
         if (["select", "radio", "checkboxes", "checkbox"].includes(field.kind)) return { field, ok: false, detail: "a text answer for a choice field" };
         await el.fill(answer.value);
         return { field, ok: true };
+      case "choices": {
+        // Several boxes may apply (a location preference): tick every option the answer allows.
+        const allowed = (option: string) => answer.include.some((r) => r.test(option)) && !answer.exclude.some((r) => r.test(option));
+        if (field.kind === "checkboxes" || field.kind === "checkbox") {
+          const boxes = field.kind === "checkboxes" ? frame.locator(`[data-applier-group="${field.id}"]`) : el;
+          const picked: string[] = [];
+          for (let i = 0; i < (await boxes.count()); i++) {
+            const box = boxes.nth(i);
+            const option = (await box.getAttribute("data-applier-option")) ?? field.label;
+            if (allowed(option)) {
+              await tick(frame, box);
+              picked.push(option);
+            }
+          }
+          return picked.length ? { field, ok: true, detail: picked.join(", ") } : { field, ok: !field.required, detail: "none of the options fit" };
+        }
+        const prefer = field.options.filter(allowed).map((o) => o.toLowerCase());
+        if (["select", "radio", "combobox"].includes(field.kind)) return fill(frame, field, { kind: "choice", prefer: prefer.length ? prefer : answer.fallback.map((o) => o.toLowerCase()) }, files);
+        return fill(frame, field, { kind: "text", value: answer.text }, files);
+      }
       case "check":
         if (field.kind === "checkbox") {
-          await el.check({ force: true });
+          await tick(frame, el);
           return { field, ok: true };
         }
         if (field.kind === "checkboxes") {
           const boxes = frame.locator(`[data-applier-group="${field.id}"]`);
-          for (let i = 0; i < (await boxes.count()); i++) await boxes.nth(i).check({ force: true });
+          for (let i = 0; i < (await boxes.count()); i++) await tick(frame, boxes.nth(i));
           return { field, ok: true };
         }
         return { field, ok: false, detail: "a checkbox answer for another field" };
@@ -170,14 +259,14 @@ async function choose(frame: Frame, el: Locator, field: Field, prefer: string[])
     const option = pickOption(field.options, prefer);
     if (!option) return { field, ok: false, detail: `no matching option among ${JSON.stringify(field.options.slice(0, 8))}` };
     const target = frame.locator(`[data-applier-group="${field.id}"][data-applier-option="${option.replace(/"/g, '\\"')}"]`).first();
-    await target.check({ force: true });
+    await tick(frame, target);
     return { field, ok: true, detail: option };
   }
   if (field.kind === "combobox") return chooseInCombobox(frame, el, field, prefer, null);
   if (field.kind === "checkbox") {
     // A single box like "Yes, I am authorized": tick it only for a yes.
     if (prefer[0] === "yes") {
-      await el.check({ force: true });
+      await tick(frame, el);
       return { field, ok: true, detail: "checked" };
     }
     return { field, ok: true, detail: "left unchecked" };

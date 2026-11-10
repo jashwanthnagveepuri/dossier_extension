@@ -276,6 +276,25 @@ export async function submitWithCode(form: SiteForm, code: string): Promise<Subm
   return submit(form);
 }
 
+/** Whether the page now shows that the application went through. */
+export async function confirmed(frame: Frame): Promise<boolean> {
+  const page = frame.page();
+  if (SUCCESS_URL.test(page.url())) return true;
+  for (const f of [frame, page.mainFrame()]) if (SUCCESS_TEXT.test(await f.locator("body").innerText().catch(() => ""))) return true;
+  return false;
+}
+
+/** The questions a site lists as missing after submit ("Missing entry for required field: …", "… is required"). */
+export function missingQuestions(why: string): string[] {
+  const found = new Set<string>();
+  for (const m of why.matchAll(/missing entry for required field:\s*(.+?)(?=\s*(?:\||missing entry for required field:|$))/gi)) found.add(m[1].trim());
+  for (const m of why.matchAll(/(?:^|[|:]\s*)([^|:]{8,160}?)\s+(?:is|are) required/gi)) {
+    const q = m[1].trim();
+    if (!/^(this|the) field$|^(this|the) question$/i.test(q)) found.add(q);
+  }
+  return [...found].slice(0, 10);
+}
+
 /** Clicks submit and waits to see what happened. */
 export async function submit(form: SiteForm): Promise<SubmitOutcome> {
   const { frame, root } = form;

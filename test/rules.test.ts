@@ -387,3 +387,17 @@ describe("error messages", () => {
     expect(short(new Error("Couldn't find the application form on this page"))).toBe("Couldn't find the application form on this page");
   });
 });
+
+describe("questions from the Nov 10 retry", () => {
+  it("knows the payroll, location-preference and know-anyone questions", async () => {
+    const { matchRule } = await import("../src/forms/answers.js");
+    expect(matchRule("Where do you plan on working from (for payroll tax purposes)?")).toBe("work_location");
+    expect(matchRule("What is your location preference?")).toBe("location_preference");
+    expect(matchRule("Do you know anyone who works at Acme?")).toBe("relatives");
+  });
+  it("reads the questions a site lists as missing", async () => {
+    const { missingQuestions } = await import("../src/forms/ats.js");
+    const why = "the form showed errors: Your form needs corrections\n\nMissing entry for required field: Where do you plan on working from (for payroll tax purposes)?\n\nMissing entry for required field: What is your location preference? | Missing entry for required field: What is your location preference?";
+    expect(missingQuestions(why)).toEqual(["Where do you plan on working from (for payroll tax purposes)?", "What is your location preference?"]);
+  });
+});

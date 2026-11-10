@@ -20,6 +20,7 @@ export type Answer =
   | { kind: "choice"; prefer: string[] } // option texts to look for, best first
   | { kind: "file"; which: "resume" | "cover_letter" }
   | { kind: "check" }
+  | { kind: "choices"; include: RegExp[]; exclude: RegExp[]; text: string; fallback: string[] } // every option that fits (checkbox lists)
   | { kind: "skip" } // optional and not ours to fill
   | { kind: "needs_you"; why: string };
 
@@ -54,7 +55,7 @@ export const RULES: Record<string, Rule> = {
   criminal_history: { description: "criminal history, convictions, background check disclosures", match: [/criminal|convicted|conviction|felony|misdemeanor|offen[cs]e|arrest/i], answer: () => needsYou("criminal history question") },
   relatives: {
     description: "relatives or friends working at the company",
-    match: [/relative|family member|related to (an?|any) (employee|person)|friends?.*(employ|work)/i],
+    match: [/relative|family member|related to (an?|any) (employee|person)|friends?.*(employ|work)|know (anyone|anybody|someone) (who (currently )?works? )?(at|here|for)/i],
     answer: (bank, field) => (bank.personal.relatives_at_company ? (isChoice(field) ? yesNo(bank.personal.relatives_at_company) : { kind: "text", value: bank.personal.relatives_at_company }) : needsYou("relatives at the company")),
   },
   agreements: {
@@ -148,6 +149,31 @@ export const RULES: Record<string, Rule> = {
   state: { description: "state or province", match: [/^\s*(state|province)\b|state\s*\/\s*province|state of residence/i], answer: (bank, field) => textOrChoice(bank.identity.address.state, [bank.identity.address.state.toLowerCase(), bank.identity.address.state_code.toLowerCase()], field) },
   country: { description: "country of residence", match: [/country/i], answer: (bank, field) => textOrChoice(bank.identity.address.country, ["united states", "united states of america", "usa", "us"], field) },
   city: { description: "city", match: [/^\s*city\b/i], answer: (bank, field) => textOrChoice(bank.identity.address.city, [bank.identity.address.city.toLowerCase()], field) },
+  work_location: {
+    description: "the city and state the candidate will work from (for payroll or tax purposes)",
+    match: [/payroll|tax purposes|plan (on|to) work(ing)? from|where will you (be )?work(ing)? from|state (you|in which you)( will)? work/i],
+    answer: (bank, field) => {
+      const { city, state, state_code } = bank.identity.address;
+      return textOrChoice(`${city}, ${state}`, [state.toLowerCase(), state_code.toLowerCase(), `${city.toLowerCase()}, ${state.toLowerCase()}`, city.toLowerCase()], field);
+    },
+  },
+  location_preference: {
+    description: "which work locations or arrangements the candidate prefers (a list of offices, remote regions, relocation)",
+    match: [/location preference|preferred (work )?locations?|where would you (like|prefer) to (work|be based)|which (of (these|the following) )?(locations?|offices?)|work location preference/i],
+    answer: (bank) => {
+      // US remote, US offices and US relocation fit when you're open to anywhere in the US; other countries don't.
+      const anywhere = bank.logistics.willing_to_relocate === "Yes";
+      const us = /\b(us|u\.s\.|usa|united states|remote|anywhere|hybrid|on-?site|in[- ]office|nyc|new york|sf|san francisco|seattle|austin|boston|chicago|denver|los angeles|la|atlanta|miami|dallas|houston)\b|relo/i;
+      const mine = new RegExp(`\\b(${bank.identity.address.city}|${bank.identity.address.state}|remote)\\b`, "i");
+      return {
+        kind: "choices",
+        include: [anywhere ? us : mine],
+        exclude: [/canada|international|outside (the )?(us|united states)|non-us|europe|emea|apac|latam|uk\b|india|mexico|brazil/i],
+        text: anywhere ? "Anywhere in the United States (remote, hybrid or on-site)" : `${bank.identity.address.city}, ${bank.identity.address.state} or remote`,
+        fallback: ["remote - us", "remote (us)", "united states", "remote", "anywhere"],
+      };
+    },
+  },
   location: {
     description: "where the candidate currently lives (city and state)",
     match: [/(current )?location|where are you (based|located)|city.{0,10}state|reside/i],
