@@ -7,9 +7,9 @@ import type { Ai } from "../ai.js";
 import type { AnswerBank } from "../config.js";
 import type { JobIdentity } from "../select/canonical.js";
 import { aiMayAnswer, answerFor, matchRule, matcherKeys, type Answer, type Field } from "./answers.js";
-import { goToNextStep, hasCaptchaChallenge, openForm, SiteBlocked, submit, submitWithCode, type SiteForm } from "./ats.js";
+import { confirmed, goToNextStep, hasCaptchaChallenge, missingQuestions, openForm, SiteBlocked, submit, submitWithCode, type SiteForm, type SubmitOutcome } from "./ats.js";
 import { checkLegalAnswers } from "./legal-check.js";
-import { fill, peekOptions, readFields, type FillResult } from "./page.js";
+import { fieldsForQuestion, fill, peekOptions, readFields, type FillResult } from "./page.js";
 import { findSaved, loadSavedAnswers, meansLetAi } from "../saved-answers.js";
 
 export type ApplyOutcome =
@@ -39,6 +39,11 @@ export async function applyOnPage(
     /** The Dossier application this form belongs to, for answers you gave for it only. */
     applicationId?: string;
     company?: string; // helps find the Greenhouse form behind a company careers page
+    /**
+     * When you're watching: shows what's stuck and waits while you fix it in the browser.
+     * Resolves to your reply: "" (Enter) = carry on, "s" = skip this application, "y"/"n" = answers to yes/no prompts.
+     */
+    assist?: (message: string) => Promise<string>;
     posting?: string;
   },
 ): Promise<ApplyOutcome> {
@@ -68,7 +73,49 @@ export async function applyOnPage(
   const done = new Set<string>();
   let coverLetter: string | undefined;
 
+  /** Answers and fills one field: your saved answer, the answer bank, then the AI; records the result. */
+  const handle = async (field: Field): Promise<FillResult> => {
+    let key = matchRule(field.label);
+    if (!key && ai && field.label && (field.required || field.options.length > 0)) {
+      key = await ai.matchQuestion(field.label, field.options, matcherKeys()).catch(() => null);
+      if (key) log(`  matched "${field.label.slice(0, 60)}" to ${key} with AI`);
+    }
+    let answer: Answer = answerFor(field, bank, key);
+    // Your own answer (npm run pending) wins over everything except files and checkboxes.
+    const found = field.kind === "file" ? undefined : findSaved(saved, field.label, options.applicationId);
+    // You told the AI to answer this one ("ai" in npm run pending): it may, even for a question it would normally leave to you.
+    const letAi = Boolean(found && meansLetAi(found.answer));
+    const mine = letAi ? undefined : found;
+    if (mine) answer = ["select", "radio", "checkboxes", "combobox"].includes(field.kind) ? { kind: "choice", prefer: [mine.answer.toLowerCase()] } : field.kind === "checkbox" ? (/^(y|yes|true|agree)/i.test(mine.answer) ? { kind: "check" } : { kind: "skip" }) : { kind: "text", value: mine.answer };
+    const canAi = Boolean(!mine && ai && options.profile && bank.ai_answers.enabled && field.label && (letAi || aiMayAnswer(key, field)));
+    const askAi = () => answerWithAi(form.frame, field, ai!, options.profile, options.posting ?? "", bank, aiAnswers, log);
+    // Optional questions the bank doesn't know get answered too, except long free-text boxes (no filler under your name).
+    const optionalUnknown = answer.kind === "skip" && key === null && field.kind !== "textarea";
+    if (canAi && (letAi || answer.kind === "needs_you" || optionalUnknown)) answer = await askAi();
+    if (answer.kind === "needs_you" && !field.required) answer = { kind: "skip" };
+    if (answer.kind === "file" && answer.which === "cover_letter" && !coverLetter && options.files.cover_letter) {
+      try {
+        coverLetter = await options.files.cover_letter();
+      } catch (error) {
+        // No letter from Dossier: an optional upload stays blank, a required one goes to you.
+        log(`  ! cover letter download failed: ${(error as Error).message}`);
+        answer = field.required ? { kind: "needs_you", why: "cover letter couldn't be downloaded from Dossier" } : { kind: "skip" };
+      }
+    }
+    let result = await fill(form.frame, field, answer, { resume: options.files.resume, cover_letter: coverLetter });
+    // The bank's answer didn't match any option (e.g. "Yes, I will require sponsorship"): let the AI pick the matching one.
+    if (!result.ok && canAi && answer.kind === "choice") {
+      const retry = await askAi();
+      if (retry.kind !== "needs_you") result = await fill(form.frame, field, retry, { resume: options.files.resume, cover_letter: coverLetter });
+      else if (!field.required) result = { field, ok: true, detail: "left blank" };
+    }
+    filled.push(result);
+    if (!result.ok && field.required) log(`  ✗ ${field.label.slice(0, 70)}: ${result.detail}`);
+    return result;
+  };
+
   const blocking: string[] = [];
+  let assisted = false;
   // Most forms are one page; some career sites split the application over several (Next / Continue).
   for (let step = 0; step < 10; step++) {
   const stepStart = filled.length;
@@ -78,42 +125,7 @@ export async function applyOnPage(
     const fields = (await readFields(form.frame, form.root)).filter((field) => !done.has(field.id));
     for (const field of fields) {
       done.add(field.id);
-      let key = matchRule(field.label);
-      if (!key && ai && field.label && (field.required || field.options.length > 0)) {
-        key = await ai.matchQuestion(field.label, field.options, matcherKeys()).catch(() => null);
-        if (key) log(`  matched "${field.label.slice(0, 60)}" to ${key} with AI`);
-      }
-      let answer: Answer = answerFor(field, bank, key);
-      // Your own answer (npm run pending) wins over everything except files and checkboxes.
-      const found = field.kind === "file" ? undefined : findSaved(saved, field.label, options.applicationId);
-      // You told the AI to answer this one ("ai" in npm run pending): it may, even for a question it would normally leave to you.
-      const letAi = Boolean(found && meansLetAi(found.answer));
-      const mine = letAi ? undefined : found;
-      if (mine) answer = ["select", "radio", "checkboxes", "combobox"].includes(field.kind) ? { kind: "choice", prefer: [mine.answer.toLowerCase()] } : field.kind === "checkbox" ? (/^(y|yes|true|agree)/i.test(mine.answer) ? { kind: "check" } : { kind: "skip" }) : { kind: "text", value: mine.answer };
-      const canAi = Boolean(!mine && ai && options.profile && bank.ai_answers.enabled && field.label && (letAi || aiMayAnswer(key, field)));
-      const askAi = () => answerWithAi(form.frame, field, ai!, options.profile, options.posting ?? "", bank, aiAnswers, log);
-      // Optional questions the bank doesn't know get answered too, except long free-text boxes (no filler under your name).
-      const optionalUnknown = answer.kind === "skip" && key === null && field.kind !== "textarea";
-      if (canAi && (letAi || answer.kind === "needs_you" || optionalUnknown)) answer = await askAi();
-      if (answer.kind === "needs_you" && !field.required) answer = { kind: "skip" };
-      if (answer.kind === "file" && answer.which === "cover_letter" && !coverLetter && options.files.cover_letter) {
-        try {
-          coverLetter = await options.files.cover_letter();
-        } catch (error) {
-          // No letter from Dossier: an optional upload stays blank, a required one goes to you.
-          log(`  ! cover letter download failed: ${(error as Error).message}`);
-          answer = field.required ? { kind: "needs_you", why: "cover letter couldn't be downloaded from Dossier" } : { kind: "skip" };
-        }
-      }
-      let result = await fill(form.frame, field, answer, { resume: options.files.resume, cover_letter: coverLetter });
-      // The bank's answer didn't match any option (e.g. "Yes, I will require sponsorship"): let the AI pick the matching one.
-      if (!result.ok && canAi && answer.kind === "choice") {
-        const retry = await askAi();
-        if (retry.kind !== "needs_you") result = await fill(form.frame, field, retry, { resume: options.files.resume, cover_letter: coverLetter });
-        else if (!field.required) result = { field, ok: true, detail: "left blank" };
-      }
-      filled.push(result);
-      if (!result.ok && field.required) log(`  ✗ ${field.label.slice(0, 70)}: ${result.detail}`);
+      await handle(field);
     }
     if (fields.length === 0) break;
   }
@@ -128,6 +140,18 @@ export async function applyOnPage(
     blocking.push(...legal);
     legal.forEach((line) => log(`  ✗ ${line}`));
   }
+  // You're watching: let you fix it in the browser, then carry on from what the page now shows.
+  if (blocking.length && options.assist) {
+    const reply = await options.assist(`Stuck on this page:\n    - ${blocking.join("\n    - ")}\n  Fix it in the browser, then press Enter to continue (or type s to skip this application): `);
+    if (reply !== "s") {
+      assisted = true;
+      blocking.length = 0;
+      const again = await checkLegalAnswers(form.frame, stepFilled, bank);
+      if (await hasCaptchaChallenge(form.frame)) again.push("a CAPTCHA is still on the page");
+      blocking.push(...again);
+      if (!again.length) log("  carrying on with your changes");
+    }
+  }
   if (blocking.length) break;
   const next = await goToNextStep(form);
   if (!next) break; // the last page: submit happens below
@@ -138,7 +162,7 @@ export async function applyOnPage(
 
   const open = filled.filter((result) => !result.ok && result.field.required);
   const questions = open.filter((result) => result.field.label).map((result) => ({ label: result.field.label, options: result.field.options.slice(0, 30) }));
-  if (!blocking.length && !filled.some((result) => result.ok && result.field.kind === "file")) blocking.push("no resume upload field was filled");
+  if (!blocking.length && !assisted && !filled.some((result) => result.ok && result.field.kind === "file")) blocking.push("no resume upload field was filled");
 
   if (aiAnswers.length) writeFileSync(join(evidenceDir, "ai-answers.txt"), aiAnswers.join("\n\n"));
   await shot("filled");
@@ -146,16 +170,38 @@ export async function applyOnPage(
   if (dryRun) return { outcome: "dry-run", filled, evidence, aiAnswers };
 
   // Only code emails sent after this click count (5 s allowance for clock differences).
-  const clickedAt = new Date(Date.now() - 5_000);
-  let sent = await submit(form);
-  for (let attempt = 1; !sent.ok && sent.needsCode && attempt <= 3; attempt++) {
-    const code = options.getCode ? await options.getCode(clickedAt).catch(() => null) : null;
-    if (!code) {
-      sent = { ok: false, why: options.getCode ? (attempt === 1 ? "the security code email didn't arrive within 3 minutes" : "the site rejected the security code, and no other code email matched this job") : "the site emailed a security code, and Gmail is off in settings.yaml" };
-      break;
+  const send = async (): Promise<SubmitOutcome> => {
+    const clickedAt = new Date(Date.now() - 5_000);
+    let sent = await submit(form);
+    for (let attempt = 1; !sent.ok && sent.needsCode && attempt <= 3; attempt++) {
+      const code = options.getCode ? await options.getCode(clickedAt).catch(() => null) : null;
+      if (!code) {
+        sent = { ok: false, why: options.getCode ? (attempt === 1 ? "the security code email didn't arrive within 3 minutes" : "the site rejected the security code, and no other code email matched this job") : "the site emailed a security code, and Gmail is off in settings.yaml" };
+        break;
+      }
+      log(`  entered the emailed security code${attempt > 1 ? ` (attempt ${attempt})` : ""}`);
+      sent = await submitWithCode(form, code);
     }
-    log(`  entered the emailed security code${attempt > 1 ? ` (attempt ${attempt})` : ""}`);
-    sent = await submitWithCode(form, code);
+    return sent;
+  };
+  let sent = await send();
+
+  // The site named questions it still needs ("Missing entry for required field: …"): answer those and submit again.
+  const missing = sent.ok ? [] : missingQuestions(sent.why);
+  if (missing.length) {
+    log(`  the site asked for ${missing.length} more answer(s); filling them`);
+    let fixed = 0;
+    for (const question of missing) for (const field of await fieldsForQuestion(form.frame, question)) if ((await handle(field)).ok) fixed++;
+    if (fixed) sent = await send();
+  }
+
+  // You're watching: fix what the site complains about and submit it yourself.
+  if (!sent.ok && options.assist) {
+    const reply = await options.assist(`Submitting didn't go through: ${sent.why}\n  Fix it in the browser and click the site's Submit button yourself, then press Enter (or type s to skip): `);
+    if (reply !== "s") {
+      if (await confirmed(form.frame)) sent = { ok: true };
+      else if ((await options.assist("Did the application go through? (y/N): ")) === "y") sent = { ok: true };
+    }
   }
   await shot("after-submit");
   return sent.ok ? { outcome: "submitted", filled, evidence, aiAnswers } : { outcome: "needs-you", why: [sent.why], questions: [], filled, evidence, aiAnswers };
