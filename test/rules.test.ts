@@ -376,3 +376,14 @@ describe("Ashby links and job-board reposts", () => {
     expect(isRepost("https://careers.acme.com/jobs/123")).toBe(false);
   });
 });
+
+describe("error messages", () => {
+  it("are one plain line without Playwright's call log or colour codes", async () => {
+    const { short } = await import("../src/errors.js");
+    const raw = 'Error: page.goto: net::ERR_HTTP2_PROTOCOL_ERROR at https://careers.acme.com/jobs/1\nCall log:\n\u001b[2m  - navigating to "https://careers.acme.com/jobs/1", waiting until "domcontentloaded"\u001b[22m\n';
+    const line = short(raw);
+    expect(line).toMatch(/^the site dropped the connection/);
+    expect(line).not.toMatch(/Call log|\u001b|\[2m|\n/);
+    expect(short(new Error("Couldn't find the application form on this page"))).toBe("Couldn't find the application form on this page");
+  });
+});

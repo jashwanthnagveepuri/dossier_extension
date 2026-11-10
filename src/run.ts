@@ -6,6 +6,7 @@ import { chromium, type BrowserContext } from "playwright";
 
 import { Ai, type PostingScore } from "./ai.js";
 import { dataDir, loadAnswerBank, loadEnv, loadSettings, secret, type AnswerBank, type Settings, documentName } from "./config.js";
+import { short } from "./errors.js";
 import { Dossier, type DraftStarted, type DraftState, type PostingText, type SearchResult } from "./dossier/mcp.js";
 import { DossierPdf } from "./dossier/pdf.js";
 import { applyOnPage, describeFilled } from "./forms/apply.js";
@@ -114,7 +115,7 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
     const skippedSites: Record<string, number> = {};
     for (const keywords of settings.search.queries) {
       const result = await dossier.call<SearchResult>("search_jobs", { keywords, place: "", country: settings.search.country, posted_within: settings.search.posted_within }).catch((error) => {
-        log(`Search "${keywords}" failed: ${String(error).slice(0, 200)}`);
+        log(`Search "${keywords}" failed: ${short(error)}`);
         return null;
       });
       if (!result) continue;
@@ -156,7 +157,7 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
         continue;
       }
       const score = await env.ai.score(profile, posting).catch((error) => {
-        log(`Scoring failed for ${candidate.company}: ${String(error).slice(0, 160)}`);
+        log(`Scoring failed for ${candidate.company}: ${short(error)}`);
         return null;
       });
       if (!score) continue;
@@ -228,9 +229,9 @@ export async function run(options: { dryRun: boolean; limit?: number }): Promise
       } catch (error) {
         // A screenshot of where it broke, for diagnosing (every page of this job is still open in the browser context).
         for (const open of env.context.pages().slice(-1)) await open.screenshot({ path: join(evidenceDir, "error.png"), fullPage: true }).catch(() => undefined);
-        ledger.add({ key: pick.key, company: pick.company, title: pick.title, by: "applier", outcome: options.dryRun ? "dry-run" : "failed", reason: String(error).slice(0, 300), applicationId, url: pick.job.applyUrl });
-        report.push(`⚠️ Failed: ${title}\n   ${String(error).slice(0, 200)}`);
-        log(`  failed: ${String(error).slice(0, 200)}`);
+        ledger.add({ key: pick.key, company: pick.company, title: pick.title, by: "applier", outcome: options.dryRun ? "dry-run" : "failed", reason: short(error, 300), applicationId, url: pick.job.applyUrl });
+        report.push(`⚠️ Failed: ${title}\n   ${short(error)}`);
+        log(`  failed: ${short(error)}`);
       }
     }
     await dossier.close();
