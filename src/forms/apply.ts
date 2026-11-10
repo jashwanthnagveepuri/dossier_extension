@@ -67,6 +67,10 @@ export async function applyOnPage(
     evidence.push(path);
   };
 
+  // The AI needs the job description for "why us" questions. When Dossier couldn't fetch the posting
+  // (some sites block it), read it from the page the applier is on.
+  let postingText = options.posting ?? "";
+  if (postingText.trim().length < 200) postingText = (await page.locator("body").innerText().catch(() => "")).slice(0, 12_000);
   const filled: FillResult[] = [];
   const saved = loadSavedAnswers();
   const aiAnswers: string[] = [];
@@ -88,7 +92,7 @@ export async function applyOnPage(
     const mine = letAi ? undefined : found;
     if (mine) answer = ["select", "radio", "checkboxes", "combobox"].includes(field.kind) ? { kind: "choice", prefer: [mine.answer.toLowerCase()] } : field.kind === "checkbox" ? (/^(y|yes|true|agree)/i.test(mine.answer) ? { kind: "check" } : { kind: "skip" }) : { kind: "text", value: mine.answer };
     const canAi = Boolean(!mine && ai && options.profile && bank.ai_answers.enabled && field.label && (letAi || aiMayAnswer(key, field)));
-    const askAi = () => answerWithAi(form.frame, field, ai!, options.profile, options.posting ?? "", bank, aiAnswers, log);
+    const askAi = () => answerWithAi(form.frame, field, ai!, options.profile, postingText, bank, aiAnswers, log);
     // Optional questions the bank doesn't know get answered too, except long free-text boxes (no filler under your name).
     const optionalUnknown = answer.kind === "skip" && key === null && field.kind !== "textarea";
     if (canAi && (letAi || answer.kind === "needs_you" || optionalUnknown)) answer = await askAi();
