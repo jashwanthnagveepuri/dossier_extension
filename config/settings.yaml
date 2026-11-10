@@ -24,6 +24,8 @@ search:
 browser:
   headless: false                     # show the browser while it works; true runs it hidden
   slow_mo_ms: 40                      # small delay between actions, so forms behave like a person typed them
+  wait_for_me: true                   # in a terminal: when an application is stuck, pause so you can fix it in the browser, then press Enter
+  wait_for_me_minutes: 10             # no reply in this long: skip it (it stays a Draft)
 
 phase:
   sites: [greenhouse, lever, ashby, other, workday]   # other = any company career site; remove one to stop applying there

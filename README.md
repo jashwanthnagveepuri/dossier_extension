@@ -69,6 +69,8 @@ Prefer to be guided? Use [AI_SETUP_PROMPT.md](AI_SETUP_PROMPT.md) instead of the
 
 ## Every day
 
+**Helping a stuck application:** when you run a command in a terminal with the browser visible, an application that gets stuck (a question it can't answer, an option it can't pick, a CAPTCHA) pauses and beeps. Fix it in the browser, then press **Enter** in the terminal: it re-checks the page (including the legal answers) and carries on, or press **s** to skip it. If submitting fails, fix the form, click the site's Submit yourself and press Enter. Turn this off with `browser.wait_for_me: false`; scheduled runs never wait.
+
 | Command | What it does |
 |---|---|
 | `npm run run` | The daily run (up to `daily_cap` applications). |

@@ -7,7 +7,7 @@ import { Dossier } from "./dossier/mcp.js";
 import { applyOnPage, describeFilled } from "./forms/apply.js";
 import { gmailClient, waitForSecurityCode } from "./gmail.js";
 import { Ledger } from "./ledger.js";
-import { opener, openEnv, run, systemOpener } from "./run.js";
+import { opener, openEnv, run, systemOpener, assistant } from "./run.js";
 import { identify, isRepost } from "./select/canonical.js";
 import { hardSkip } from "./select/filters.js";
 import { createInterface } from "node:readline/promises";
@@ -117,6 +117,7 @@ async function finish(env: Env, entry: LedgerEntry, dryRun: boolean): Promise<"s
     if (!resume) return "skipped";
     const page = await env.context.newPage();
     const outcome = await applyOnPage(page, job, {
+      assist: dryRun ? undefined : assistant(env.settings),
       bank: env.bank,
       ai: env.ai,
       dryRun,

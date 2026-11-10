@@ -116,7 +116,13 @@ export const settingsSchema = z.object({
     posted_within: z.enum(["any", "day", "3days", "week", "month"]),
     queries: z.array(text).min(1),
   }),
-  browser: z.object({ headless: z.boolean(), slow_mo_ms: z.number().int().min(0) }),
+  browser: z.object({
+    headless: z.boolean(),
+    slow_mo_ms: z.number().int().min(0),
+    // When you run it in a terminal: pause on a stuck application so you can fix it in the browser.
+    wait_for_me: z.boolean().default(true),
+    wait_for_me_minutes: z.number().int().min(1).default(10),
+  }),
   phase: z.object({ sites: z.array(z.enum(["greenhouse", "lever", "ashby", "workday", "other"])) }),
   gmail: z.object({ enabled: z.boolean(), client_file: text, lookback_days: z.number().int().min(1) }),
 });
