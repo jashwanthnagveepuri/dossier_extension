@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { dataDir, documentName } from "./config.js";
+import { short } from "./errors.js";
 import { Dossier } from "./dossier/mcp.js";
 import { applyOnPage, describeFilled } from "./forms/apply.js";
 import { gmailClient, waitForSecurityCode } from "./gmail.js";
@@ -69,7 +70,7 @@ async function tryOne(url: string | undefined) {
     } catch (error) {
       await page.screenshot({ path: join(evidenceDir, "error.png"), fullPage: true }).catch(() => undefined);
       writeFileSync(join(evidenceDir, "page.html"), await page.content().catch(() => ""));
-      console.log(`\nIt stopped with an error: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
+      console.log(`\nIt stopped with an error: ${short(error)}`);
     }
     console.log(`\nScreenshot and details: ${evidenceDir}`);
     if (!flag("close")) {
@@ -158,7 +159,7 @@ async function retry(target: string | undefined) {
       const results: Record<string, number> = {};
       for (const entry of all) {
         const result = await finish(env, entry, flag("dry-run")).catch(async (error) => {
-          console.log(`  ⚠️ ${entry.company}: ${String(error).slice(0, 200)}`);
+          console.log(`  ⚠️ ${entry.company}: ${short(error)}`);
           if (/no longer exists/i.test(String(error))) {
             // You deleted it in Dossier: stop retrying it.
             env.ledger.add({ key: entry.key, company: entry.company, title: entry.title, by: "applier", outcome: "skipped", reason: "deleted in Dossier", applicationId: entry.applicationId, url: entry.url });
@@ -200,7 +201,7 @@ async function pending() {
       : (entry.reason ?? "").split("; ").filter((part) => /not in the answer bank|AI couldn't answer|no matching option|couldn't fill/.test(part)).map((part) => ({ label: part.split(/: (?=question not in|"|no matching|couldn't)/)[0].trim(), options: [] as string[] })).filter((q) => q.label);
     const questions = asked.filter((q) => !findSaved(saved, q.label, entry.applicationId));
     if (!asked.length) {
-      console.log(`   Reason: ${entry.reason ?? "unknown"}`);
+      console.log(`   Reason: ${entry.reason ? short(entry.reason) : "unknown"}`);
       const again = (await rl.question("   Nothing to answer here. Try submitting it again? (y/N) ")).trim().toLowerCase();
       if (again.startsWith("y")) ready.push(entry);
       continue;
@@ -228,7 +229,7 @@ async function pending() {
   console.log(`Finishing ${ready.length} application(s)…`);
   const env = await openEnv();
   try {
-    for (const entry of ready) await finish(env, entry, false).catch((error) => console.log(`  ⚠️ ${entry.company}: ${String(error).slice(0, 200)}`));
+    for (const entry of ready) await finish(env, entry, false).catch((error) => console.log(`  ⚠️ ${entry.company}: ${short(error)}`));
   } finally {
     await env.close();
   }
